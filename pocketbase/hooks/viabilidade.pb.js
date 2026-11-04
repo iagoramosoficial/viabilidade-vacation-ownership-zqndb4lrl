@@ -375,7 +375,7 @@ routerAdd('POST', '/backend/v1/viabilidade/simular', function (e) {
   const mesInicial = estudo.getString('mes_inicial') || '2025-01'
 
   // Carrega motor determinístico fonte única
-  const core = require(`${__hooks}/viabilidade_core.js`)
+  const core = require(`${__hooks}/viabilidade_core.pb.js`)
 
   // Validação estrita antes do cálculo: se houver pendências bloqueantes, retorna 422
   const errosValidacao = core.vb_validarPremissas(premissas, horizonte)
@@ -447,7 +447,7 @@ routerAdd('GET', '/backend/v1/viabilidade/autoteste', function (e) {
     return e.json(403, { error: 'Acesso restrito a Administradores Master.' })
   }
 
-  const core = require(`${__hooks}/viabilidade_core.js`)
+  const core = require(`${__hooks}/viabilidade_core.pb.js`)
   const casos = []
 
   function addCaso(id, nome, esperado, obtido, passou, detalhe) {

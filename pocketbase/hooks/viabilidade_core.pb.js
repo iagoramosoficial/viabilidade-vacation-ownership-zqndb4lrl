@@ -1,5 +1,5 @@
-// pocketbase/hooks/viabilidade_core.js
-// Cópia idêntica de pocketbase/core/viabilidade_core.js para carregamento direto via require('./viabilidade_core.js') no JSVM do PocketBase.
+// pocketbase/hooks/viabilidade_core.pb.js
+// Cópia idêntica de pocketbase/core/viabilidade_core.js para carregamento direto via require(`${__hooks}/viabilidade_core.pb.js`) no JSVM do PocketBase.
 
 'use strict'
 

@@ -1,6 +1,6 @@
 // scripts/sync-core.mjs
 // Sincroniza pocketbase/core/viabilidade_core.js para src/lib/pocketbase/viabilidade_core.mjs (módulo ES)
-// e para pocketbase/hooks/viabilidade_core.js (para o require do PocketBase hooks).
+// e para pocketbase/hooks/viabilidade_core.pb.js (para o require do PocketBase hooks).
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
@@ -11,7 +11,7 @@ const root = resolve(__dirname, '..')
 
 const srcCorePath = resolve(root, 'pocketbase/core/viabilidade_core.js')
 const destEsPath = resolve(root, 'src/lib/pocketbase/viabilidade_core.mjs')
-const destHookPath = resolve(root, 'pocketbase/hooks/viabilidade_core.js')
+const destHookPath = resolve(root, 'pocketbase/hooks/viabilidade_core.pb.js')
 
 const coreCode = readFileSync(srcCorePath, 'utf8')
 
@@ -40,4 +40,4 @@ console.log('✔ Sincronizado para src/lib/pocketbase/viabilidade_core.mjs')
 
 // 2. Atualiza cópia do hook
 writeFileSync(destHookPath, coreCode, 'utf8')
-console.log('✔ Sincronizado para pocketbase/hooks/viabilidade_core.js')
+console.log('✔ Sincronizado para pocketbase/hooks/viabilidade_core.pb.js')
