@@ -10,27 +10,30 @@
  * - POST /backend/v1/viabilidade/duplicar-cenario (membro não-viewer da empresa)
  * - POST /backend/v1/viabilidade/simular (membro não-viewer; executa core e grava resultado)
  * - GET  /backend/v1/viabilidade/autoteste (is_master; roda suite de autoteste no servidor)
+ *
+ * NOTA DE ESCOPO: Todos os callbacks de routerAdd contêm sua lógica 100% inline,
+ * sem depender de funções ou variáveis do escopo de topo.
  */
 
 // ---------------------------------------------------------------------------
 // ADMIN: POST /backend/v1/admin/usuarios
 // ---------------------------------------------------------------------------
-routerAdd('POST', '/backend/v1/admin/usuarios', function (e) {
-  const authRecord = e.auth
-  const isMaster = !!(authRecord && authRecord.getBool('is_master'))
-  if (!isMaster) {
+routerAdd('POST', '/backend/v1/admin/usuarios', (e) => {
+  const callerAuth = e.auth
+  const callerIsMaster = Boolean(callerAuth && callerAuth.getBool('is_master'))
+  if (!callerIsMaster) {
     return e.json(403, { error: 'Acesso restrito a Administradores Master.' })
   }
 
-  const info = e.requestInfo()
-  const data = info.body || {}
+  const reqInfo = e.requestInfo()
+  const reqData = reqInfo.body || {}
 
-  const email = (data.email || '').trim().toLowerCase()
-  const password = (data.password || '').trim()
-  const name = (data.name || '').trim()
-  const isMasterPayload = !!data.is_master
-  const empresaId = data.empresa_id || null
-  const role = data.role || 'analista'
+  const email = (reqData.email || '').trim().toLowerCase()
+  const password = (reqData.password || '').trim()
+  const name = (reqData.name || '').trim()
+  const isMasterPayload = Boolean(reqData.is_master)
+  const empresaId = reqData.empresa_id || null
+  const role = reqData.role || 'analista'
 
   if (!email || !password) {
     return e.json(400, { error: 'E-mail e senha são obrigatórios.' })
@@ -91,10 +94,10 @@ routerAdd('POST', '/backend/v1/admin/usuarios', function (e) {
 // ---------------------------------------------------------------------------
 // ADMIN: GET /backend/v1/admin/usuarios
 // ---------------------------------------------------------------------------
-routerAdd('GET', '/backend/v1/admin/usuarios', function (e) {
-  const authRecord = e.auth
-  const isMaster = !!(authRecord && authRecord.getBool('is_master'))
-  if (!isMaster) {
+routerAdd('GET', '/backend/v1/admin/usuarios', (e) => {
+  const callerAuth = e.auth
+  const callerIsMaster = Boolean(callerAuth && callerAuth.getBool('is_master'))
+  if (!callerIsMaster) {
     return e.json(403, { error: 'Acesso restrito a Administradores Master.' })
   }
 
@@ -103,7 +106,7 @@ routerAdd('GET', '/backend/v1/admin/usuarios', function (e) {
   const membros = e.app.findRecordsByFilter('empresa_membros', '1 = 1', '-created', 500)
 
   const membrosMap = {}
-  membros.forEach(function (m) {
+  membros.forEach((m) => {
     const uId = m.getString('user')
     if (!membrosMap[uId]) membrosMap[uId] = []
     membrosMap[uId].push({
@@ -114,7 +117,7 @@ routerAdd('GET', '/backend/v1/admin/usuarios', function (e) {
   })
 
   const empresasMap = {}
-  empresas.forEach(function (emp) {
+  empresas.forEach((emp) => {
     empresasMap[emp.id] = {
       id: emp.id,
       nome: emp.getString('nome'),
@@ -122,7 +125,7 @@ routerAdd('GET', '/backend/v1/admin/usuarios', function (e) {
     }
   })
 
-  const listaUsuarios = users.map(function (u) {
+  const listaUsuarios = users.map((u) => {
     const uMembros = membrosMap[u.id] || []
     return {
       id: u.id,
@@ -130,27 +133,21 @@ routerAdd('GET', '/backend/v1/admin/usuarios', function (e) {
       name: u.getString('name'),
       is_master: u.getBool('is_master'),
       created: u.getString('created'),
-      vinculos: uMembros.map(function (vm) {
-        return {
-          id: vm.id,
-          empresa_id: vm.empresa_id,
-          empresa_nome: empresasMap[vm.empresa_id]
-            ? empresasMap[vm.empresa_id].nome
-            : 'Desconhecida',
-          role: vm.role,
-        }
-      }),
+      vinculos: uMembros.map((vm) => ({
+        id: vm.id,
+        empresa_id: vm.empresa_id,
+        empresa_nome: empresasMap[vm.empresa_id] ? empresasMap[vm.empresa_id].nome : 'Desconhecida',
+        role: vm.role,
+      })),
     }
   })
 
-  const listaEmpresas = empresas.map(function (emp) {
-    return {
-      id: emp.id,
-      nome: emp.getString('nome'),
-      cnpj: emp.getString('cnpj'),
-      created: emp.getString('created'),
-    }
-  })
+  const listaEmpresas = empresas.map((emp) => ({
+    id: emp.id,
+    nome: emp.getString('nome'),
+    cnpj: emp.getString('cnpj'),
+    created: emp.getString('created'),
+  }))
 
   return e.json(200, {
     usuarios: listaUsuarios,
@@ -161,21 +158,21 @@ routerAdd('GET', '/backend/v1/admin/usuarios', function (e) {
 // ---------------------------------------------------------------------------
 // ADMIN: POST /backend/v1/admin/empresas
 // ---------------------------------------------------------------------------
-routerAdd('POST', '/backend/v1/admin/empresas', function (e) {
-  const authRecord = e.auth
-  const isMaster = !!(authRecord && authRecord.getBool('is_master'))
-  if (!isMaster) {
+routerAdd('POST', '/backend/v1/admin/empresas', (e) => {
+  const callerAuth = e.auth
+  const callerIsMaster = Boolean(callerAuth && callerAuth.getBool('is_master'))
+  if (!callerIsMaster) {
     return e.json(403, { error: 'Acesso restrito a Administradores Master.' })
   }
 
-  const info = e.requestInfo()
-  const data = info.body || {}
+  const reqInfo = e.requestInfo()
+  const reqData = reqInfo.body || {}
 
-  const nome = (data.nome || '').trim()
-  const rawCnpj = (data.cnpj || '').toString().trim()
+  const nome = (reqData.nome || '').trim()
+  const rawCnpj = (reqData.cnpj || '').toString().trim()
   const cnpjLimpo = rawCnpj.replace(/\D/g, '')
-  const usuarioId = data.usuario_id || null
-  const role = data.role || 'admin_master'
+  const usuarioId = reqData.usuario_id || null
+  const role = reqData.role || 'admin_master'
 
   if (!nome) {
     return e.json(400, { error: 'O nome da empresa é obrigatório.' })
@@ -196,7 +193,7 @@ routerAdd('POST', '/backend/v1/admin/empresas', function (e) {
   e.app.save(empRecord)
 
   let vinculo = null
-  const userParaVincularId = usuarioId === 'self' || !usuarioId ? authRecord.id : usuarioId
+  const userParaVincularId = usuarioId === 'self' || !usuarioId ? callerAuth.id : usuarioId
   if (userParaVincularId) {
     try {
       const membrosCollection = e.app.findCollectionByNameOrId('empresa_membros')
@@ -225,16 +222,16 @@ routerAdd('POST', '/backend/v1/admin/empresas', function (e) {
 // ---------------------------------------------------------------------------
 // VIABILIDADE: POST /backend/v1/viabilidade/duplicar-cenario
 // ---------------------------------------------------------------------------
-routerAdd('POST', '/backend/v1/viabilidade/duplicar-cenario', function (e) {
-  const authRecord = e.auth
-  if (!authRecord) {
+routerAdd('POST', '/backend/v1/viabilidade/duplicar-cenario', (e) => {
+  const callerAuth = e.auth
+  if (!callerAuth) {
     return e.json(401, { error: 'Não autenticado.' })
   }
 
-  const info = e.requestInfo()
-  const data = info.body || {}
-  const cenarioId = data.cenario_id
-  const novoNome = (data.novo_nome || '').trim()
+  const reqInfo = e.requestInfo()
+  const reqData = reqInfo.body || {}
+  const cenarioId = reqData.cenario_id
+  const novoNome = (reqData.novo_nome || '').trim()
 
   if (!cenarioId || !novoNome) {
     return e.json(400, { error: 'cenario_id e novo_nome são obrigatórios.' })
@@ -256,14 +253,14 @@ routerAdd('POST', '/backend/v1/viabilidade/duplicar-cenario', function (e) {
   }
 
   const empresaId = estudo.getString('empresa')
-  const isMaster = !!authRecord.getBool('is_master')
+  const callerIsMaster = Boolean(callerAuth.getBool('is_master'))
 
   let papel = null
   if (empresaId) {
     try {
       const records = e.app.findRecordsByFilter(
         'empresa_membros',
-        `user = "${authRecord.id}" && empresa = "${empresaId}"`,
+        `user = "${callerAuth.id}" && empresa = "${empresaId}"`,
         '-created',
         1,
       )
@@ -273,7 +270,7 @@ routerAdd('POST', '/backend/v1/viabilidade/duplicar-cenario', function (e) {
     } catch (_) {}
   }
 
-  if (!isMaster) {
+  if (!callerIsMaster) {
     if (!papel) {
       return e.json(403, { error: 'Você não tem acesso ao estudo desta empresa.' })
     }
@@ -312,15 +309,15 @@ routerAdd('POST', '/backend/v1/viabilidade/duplicar-cenario', function (e) {
 // ---------------------------------------------------------------------------
 // VIABILIDADE: POST /backend/v1/viabilidade/simular
 // ---------------------------------------------------------------------------
-routerAdd('POST', '/backend/v1/viabilidade/simular', function (e) {
-  const authRecord = e.auth
-  if (!authRecord) {
+routerAdd('POST', '/backend/v1/viabilidade/simular', (e) => {
+  const callerAuth = e.auth
+  if (!callerAuth) {
     return e.json(401, { error: 'Não autenticado.' })
   }
 
-  const info = e.requestInfo()
-  const data = info.body || {}
-  const cenarioId = data.cenario_id
+  const reqInfo = e.requestInfo()
+  const reqData = reqInfo.body || {}
+  const cenarioId = reqData.cenario_id
 
   if (!cenarioId) {
     return e.json(400, { error: 'cenario_id é obrigatório.' })
@@ -342,14 +339,14 @@ routerAdd('POST', '/backend/v1/viabilidade/simular', function (e) {
   }
 
   const empresaId = estudo.getString('empresa')
-  const isMaster = !!authRecord.getBool('is_master')
+  const callerIsMaster = Boolean(callerAuth.getBool('is_master'))
 
   let papel = null
   if (empresaId) {
     try {
       const records = e.app.findRecordsByFilter(
         'empresa_membros',
-        `user = "${authRecord.id}" && empresa = "${empresaId}"`,
+        `user = "${callerAuth.id}" && empresa = "${empresaId}"`,
         '-created',
         1,
       )
@@ -359,7 +356,7 @@ routerAdd('POST', '/backend/v1/viabilidade/simular', function (e) {
     } catch (_) {}
   }
 
-  if (!isMaster) {
+  if (!callerIsMaster) {
     if (!papel) {
       return e.json(403, { error: 'Você não tem acesso a esta empresa.' })
     }
@@ -376,31 +373,22 @@ routerAdd('POST', '/backend/v1/viabilidade/simular', function (e) {
 
   // Carrega motor determinístico fonte única
   let core = null
-  if (typeof globalThis !== 'undefined' && globalThis.vb_calcularSimulacao) {
-    core = globalThis
-  } else if (typeof vb_calcularSimulacao === 'function') {
-    core = {
-      vb_resolverValorMes: vb_resolverValorMes,
-      vb_formatarBRL: vb_formatarBRL,
-      vb_formatarPorcentagem: vb_formatarPorcentagem,
-      vb_validarPremissas: vb_validarPremissas,
-      vb_calcularSimulacao: vb_calcularSimulacao,
-      vb_gerarHashPremissas: vb_gerarHashPremissas,
-      VB_MOTOR_VERSAO: typeof VB_MOTOR_VERSAO !== 'undefined' ? VB_MOTOR_VERSAO : 'v1.4.0',
-    }
-  } else {
+  try {
+    core = require(`${__hooks}/viabilidade_core_pb.pb.js`)
+  } catch (_) {
     try {
       core = require(`${__hooks}/viabilidade_core.pb.js`)
     } catch (_) {
+      let code = ''
       try {
-        core = require('./viabilidade_core.pb.js')
-      } catch (err2) {
-        const code = readerToString($os.readFile(`${__hooks}/viabilidade_core.pb.js`))
-        const fn = new Function('module', 'exports', 'globalThis', code)
-        const dummyModule = { exports: {} }
-        fn(dummyModule, dummyModule.exports, globalThis)
-        core = dummyModule.exports.vb_calcularSimulacao ? dummyModule.exports : globalThis
+        code = readerToString($os.readFile(`${__hooks}/viabilidade_core_pb.pb.js`))
+      } catch (__e) {
+        code = readerToString($os.readFile(`${__hooks}/viabilidade_core.pb.js`))
       }
+      const fn = new Function('module', 'exports', 'globalThis', code)
+      const dummyModule = { exports: {} }
+      fn(dummyModule, dummyModule.exports, globalThis)
+      core = dummyModule.exports.vb_calcularSimulacao ? dummyModule.exports : globalThis
     }
   }
 
@@ -424,7 +412,7 @@ routerAdd('POST', '/backend/v1/viabilidade/simular', function (e) {
     simFalha.set('schema_version', 2)
     simFalha.set('status', 'falha')
     simFalha.set('erro_mensagem', String(err.message || err))
-    simFalha.set('executado_por', authRecord.id)
+    simFalha.set('executado_por', callerAuth.id)
     simFalha.set('motor_versao', core.VB_MOTOR_VERSAO)
     simFalha.set('hash_premissas', core.vb_gerarHashPremissas(premissas))
     e.app.save(simFalha)
@@ -446,7 +434,7 @@ routerAdd('POST', '/backend/v1/viabilidade/simular', function (e) {
   simRecord.set('status', 'sucesso')
   simRecord.set('input_snapshot', premissas)
   simRecord.set('resultado', resultado)
-  simRecord.set('executado_por', authRecord.id)
+  simRecord.set('executado_por', callerAuth.id)
   simRecord.set('motor_versao', motorVersao)
   simRecord.set('hash_premissas', hashPremissas)
   e.app.save(simRecord)
@@ -467,91 +455,80 @@ routerAdd('POST', '/backend/v1/viabilidade/simular', function (e) {
 // ---------------------------------------------------------------------------
 // VIABILIDADE: GET /backend/v1/viabilidade/autoteste (só is_master, 403 para os demais)
 // ---------------------------------------------------------------------------
-routerAdd('GET', '/backend/v1/viabilidade/autoteste', function (e) {
-  const authRecord = e.auth
-  const isMaster = !!(authRecord && authRecord.getBool('is_master'))
-  if (!isMaster) {
+routerAdd('GET', '/backend/v1/viabilidade/autoteste', (e) => {
+  const callerAuth = e.auth
+  const callerIsMaster = Boolean(callerAuth && callerAuth.getBool('is_master'))
+  if (!callerIsMaster) {
     return e.json(403, { error: 'Acesso restrito a Administradores Master.' })
   }
 
   try {
     let core = null
-    if (typeof globalThis !== 'undefined' && globalThis.vb_calcularSimulacao) {
-      core = globalThis
-    } else if (typeof vb_calcularSimulacao === 'function') {
-      core = {
-        vb_resolverValorMes: vb_resolverValorMes,
-        vb_formatarBRL: vb_formatarBRL,
-        vb_formatarPorcentagem: vb_formatarPorcentagem,
-        vb_validarPremissas: vb_validarPremissas,
-        vb_calcularSimulacao: vb_calcularSimulacao,
-        vb_gerarHashPremissas: vb_gerarHashPremissas,
-        VB_MOTOR_VERSAO: typeof VB_MOTOR_VERSAO !== 'undefined' ? VB_MOTOR_VERSAO : 'v1.4.0',
-      }
-    } else {
+    try {
+      core = require(`${__hooks}/viabilidade_core_pb.pb.js`)
+    } catch (_) {
       try {
         core = require(`${__hooks}/viabilidade_core.pb.js`)
-      } catch (errReq1) {
+      } catch (_) {
+        let code = ''
         try {
-          core = require('./viabilidade_core.pb.js')
-        } catch (errReq2) {
-          // Fallback: carregar código via $os.readFile
-          const code = readerToString($os.readFile(`${__hooks}/viabilidade_core.pb.js`))
-          const fn = new Function('module', 'exports', 'globalThis', code)
-          const dummyModule = { exports: {} }
-          fn(dummyModule, dummyModule.exports, globalThis)
-          core = dummyModule.exports.vb_calcularSimulacao ? dummyModule.exports : globalThis
+          code = readerToString($os.readFile(`${__hooks}/viabilidade_core_pb.pb.js`))
+        } catch (__e) {
+          code = readerToString($os.readFile(`${__hooks}/viabilidade_core.pb.js`))
         }
+        const fn = new Function('module', 'exports', 'globalThis', code)
+        const dummyModule = { exports: {} }
+        fn(dummyModule, dummyModule.exports, globalThis)
+        core = dummyModule.exports.vb_calcularSimulacao ? dummyModule.exports : globalThis
       }
     }
+
     const casos = []
 
-    function addCaso(id, nome, esperado, obtido, passou, detalhe) {
+    const addCaso = (id, nome, esperado, obtido, passou, detalhe) => {
       casos.push({
         id: id,
         nome: nome,
         esperado: esperado,
         obtido: obtido,
-        passou: !!passou,
+        passou: Boolean(passou),
         detalhe: detalhe || '',
       })
     }
 
-    function criarBaseMinima() {
-      return {
-        salas: [],
-        produtos: [],
-        mix_por_sala: [],
-        condicoes_pagamento: {
-          multipropriedade: {
-            perc_entrada: 0.2,
-            parcelas_entrada: 1,
-            mes_primeira_saldo: 1,
-            parcelas_saldo: 10,
-          },
-          timeshare: {
-            perc_entrada: 0.2,
-            parcelas_entrada: 1,
-            mes_primeira_saldo: 1,
-            parcelas_saldo: 10,
-          },
+    const criarBaseMinima = () => ({
+      salas: [],
+      produtos: [],
+      mix_por_sala: [],
+      condicoes_pagamento: {
+        multipropriedade: {
+          perc_entrada: 0.2,
+          parcelas_entrada: 1,
+          mes_primeira_saldo: 1,
+          parcelas_saldo: 10,
         },
-        cancelamentos_inadimplencia: {
-          multipropriedade: {
-            cancelamento: { taxa: 0, mes_medio: 1, taxa_devolucao: 0, prazo_devolucao: 1 },
-            inadimplencia: { taxa: 0, parcela_recuperavel: 0, prazo_recuperacao: 1 },
-          },
-          timeshare: {
-            cancelamento: { taxa: 0, mes_medio: 1, taxa_devolucao: 0, prazo_devolucao: 1 },
-            inadimplencia: { taxa: 0, parcela_recuperavel: 0, prazo_recuperacao: 1 },
-          },
+        timeshare: {
+          perc_entrada: 0.2,
+          parcelas_entrada: 1,
+          mes_primeira_saldo: 1,
+          parcelas_saldo: 10,
         },
-        remuneracoes: [],
-        custos_despesas: [],
-        investimentos: [],
-        caixa_inicial: { comercializadora: 0, empreendimento: 0 },
-      }
-    }
+      },
+      cancelamentos_inadimplencia: {
+        multipropriedade: {
+          cancelamento: { taxa: 0, mes_medio: 1, taxa_devolucao: 0, prazo_devolucao: 1 },
+          inadimplencia: { taxa: 0, parcela_recuperavel: 0, prazo_recuperacao: 1 },
+        },
+        timeshare: {
+          cancelamento: { taxa: 0, mes_medio: 1, taxa_devolucao: 0, prazo_devolucao: 1 },
+          inadimplencia: { taxa: 0, parcela_recuperavel: 0, prazo_recuperacao: 1 },
+        },
+      },
+      remuneracoes: [],
+      custos_despesas: [],
+      investimentos: [],
+      caixa_inicial: { comercializadora: 0, empreendimento: 0 },
+    })
 
     // CASO 1: Blueprint 1
     try {
@@ -763,9 +740,9 @@ routerAdd('GET', '/backend/v1/viabilidade/autoteste', function (e) {
       }
 
       const res = core.vb_calcularSimulacao(p, 6, '2025-01')
-      const recs = [0, 1, 2, 3, 4, 5].map(function (idx) {
-        return res.empreendimento.fluxos_mensais[idx].recebimentos_brutos
-      })
+      const recs = [0, 1, 2, 3, 4, 5].map(
+        (idx) => res.empreendimento.fluxos_mensais[idx].recebimentos_brutos,
+      )
       const esp = [10000, 10000, 20000, 20000, 20000, 20000]
       let ok = true
       for (let k = 0; k < 6; k++) {
@@ -1325,9 +1302,7 @@ routerAdd('GET', '/backend/v1/viabilidade/autoteste', function (e) {
       addCaso(12, 'Retenção de entrada', {}, 'erro: ' + err.message, false, err.message)
     }
 
-    const totalPassou = casos.filter(function (c) {
-      return c.passou
-    }).length
+    const totalPassou = casos.filter((c) => c.passou).length
     const todosPassaram = totalPassou === casos.length
 
     return e.json(200, {
