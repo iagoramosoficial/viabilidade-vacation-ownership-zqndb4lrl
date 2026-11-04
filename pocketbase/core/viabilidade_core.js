@@ -1,14 +1,14 @@
 // pocketbase/core/viabilidade_core.js
 // CORE DETERMINÍSTICO DO MOTOR (fonte única, ES5, sem imports/exports)
-// Carregado via load_file no JSVM do PocketBase (pocketbase/hooks/viabilidade.pb.js)
+// Pode ser carregado no JSVM do PocketBase via require('./viabilidade_core.js')
 // e sincronizado ao navegador por scripts/sync-core.mjs (npm run sync-core) em
-// src/lib/pocketbase/viabilidade_core.mjs — altere ESTE arquivo e rode o sync.
+// src/lib/pocketbase/viabilidade_core.mjs.
 // API exposta: vb_resolverValorMes, vb_formatarBRL, vb_formatarPorcentagem,
-// vb_validarPremissas, vb_calcularSimulacao, VB_MOTOR_VERSAO.
+// vb_validarPremissas, vb_calcularSimulacao, vb_gerarHashPremissas, VB_MOTOR_VERSAO.
 
 'use strict'
 
-var VB_MOTOR_VERSAO = 'v1.3.1'
+var VB_MOTOR_VERSAO = 'v1.4.0'
 
 // ---------- Formatação e helpers compartilhados ----------
 function vb_resolverValorMes(config, mesIdx) {
@@ -40,6 +40,24 @@ function vb_formatarPorcentagem(valor, casas) {
   var f = Math.pow(10, c)
   var s = (Math.round(num * f) / f).toFixed(c).replace('.', ',')
   return s + '%'
+}
+
+// Hash determinístico simples (DJB2 / FNV-1a híbrido) para rastreabilidade
+function vb_gerarHashPremissas(premissas) {
+  var str = ''
+  try {
+    str = JSON.stringify(premissas) || ''
+  } catch (_) {
+    str = String(premissas || '')
+  }
+  var h = 5381
+  for (var i = 0; i < str.length; i++) {
+    h = ((h << 5) + h) ^ str.charCodeAt(i)
+    h = h & h // converte para 32-bit int
+  }
+  var hex = (h >>> 0).toString(16)
+  while (hex.length < 8) hex = '0' + hex
+  return 'sha_' + hex
 }
 
 // ---------- Validação de premissas (bloqueante, antes do cálculo) ----------
@@ -98,17 +116,18 @@ function vb_validarPremissas(premissas, horizonte) {
   var salas = premissas.salas || []
   var produtos = premissas.produtos || []
   var mix = premissas.mix_por_sala || []
-  var cp = premissas.condicoes_pagamento || {}
-  var ci = premissas.cancelamentos_inadimplencia || {}
+  var cp = premissas.condicoes_pagamento
+  var ci = premissas.cancelamentos_inadimplencia
   var rem = premissas.remuneracoes || []
   var cd = premissas.custos_despesas || []
   var inv = premissas.investimentos || []
-  var caixa = premissas.caixa_inicial || {}
+  var caixa = premissas.caixa_inicial
 
   var idsSalas = {}
   var idsProdutos = {}
   var idsSalasComMix = {}
   var idsSalasComPonto = {}
+  var modalidadesPresentes = {}
 
   if (!Array.isArray(salas)) erros.push('salas deve ser lista')
   else {
@@ -169,6 +188,15 @@ function vb_validarPremissas(premissas, horizonte) {
           pegaVM(ponto.custo_transporte_unitario, ondeP + '.custo_transporte_unitario')
           if (rv(ponto.custo_transporte_unitario) < 0)
             erros.push(ondeP + '.custo_transporte_unitario: não pode ser negativo')
+          if (
+            ponto.responsavel_transporte !== undefined &&
+            ponto.responsavel_transporte !== null &&
+            ['comercializadora', 'empreendimento'].indexOf(ponto.responsavel_transporte) < 0
+          ) {
+            erros.push(
+              ondeP + '.responsavel_transporte: deve ser "comercializadora" ou "empreendimento"',
+            )
+          }
           temPontoAtivo = true
           idsSalasComPonto[sala.id] = true
         })
@@ -188,6 +216,7 @@ function vb_validarPremissas(premissas, horizonte) {
       else idsProdutos[prod.id] = true
       if (['multipropriedade', 'timeshare'].indexOf(prod.modalidade) < 0)
         erros.push(onde + ': modalidade inválida "' + prod.modalidade + '"')
+      else modalidadesPresentes[prod.modalidade] = true
       pegaVM(prod.preco, onde + '.preco')
       if (rv(prod.preco) < 0) erros.push(onde + '.preco: não pode ser negativo')
       if (!isNum(Number(prod.estoque_disponivel)))
@@ -231,7 +260,7 @@ function vb_validarPremissas(premissas, horizonte) {
     })
   }
 
-  // Toda sala ativa precisa de mix definido (o mix fecha 100% por nível ativo)
+  // Toda sala ativa precisa de mix definido
   salas.forEach(function (sala) {
     if (sala && sala.id && idsSalasComPonto[sala.id] && !idsSalasComMix[sala.id]) {
       erros.push(
@@ -242,49 +271,75 @@ function vb_validarPremissas(premissas, horizonte) {
     }
   })
 
-  function validaCond(mod) {
-    var cond = cp[mod]
-    if (!cond) return
-    var onde = 'condicoes_pagamento.' + mod
-    pegaPerc(cond.perc_entrada, onde + '.perc_entrada')
-    if (!isNum(Number(cond.parcelas_entrada)) || Number(cond.parcelas_entrada) < 1)
-      erros.push(onde + '.parcelas_entrada: deve ser inteiro >= 1')
-    if (!isNum(Number(cond.mes_primeira_saldo)) || Number(cond.mes_primeira_saldo) < 0)
-      erros.push(
-        onde + '.mes_primeira_saldo: deve ser inteiro >= 0 (0 = primeira parcela do saldo em M0)',
-      )
-    if (!isNum(Number(cond.parcelas_saldo)) || Number(cond.parcelas_saldo) < 0)
-      erros.push(onde + '.parcelas_saldo: deve ser >= 0')
-  }
-  validaCond('multipropriedade')
-  validaCond('timeshare')
-
-  function validaCancInad(mod) {
-    var cfg = ci[mod]
-    if (!cfg) return
-    var onde = 'cancelamentos_inadimplencia.' + mod
-    var c = cfg.cancelamento
-    if (c) {
-      pegaPerc(c.taxa, onde + '.cancelamento.taxa')
-      if (!isNum(Number(c.mes_medio)) || Number(c.mes_medio) < 0)
-        erros.push(onde + '.cancelamento.mes_medio: deve ser >= 0')
-      pegaPerc(c.taxa_devolucao, onde + '.cancelamento.taxa_devolucao')
-      if (!isNum(Number(c.prazo_devolucao)) || Number(c.prazo_devolucao) < 1)
+  // Sem defaults inventados: condição de pagamento ausente é bloqueante
+  if (!cp || typeof cp !== 'object') {
+    erros.push('condicoes_pagamento: ausente ou não informada (pendência bloqueante)')
+  } else {
+    function validaCond(mod) {
+      var cond = cp[mod]
+      if (!cond) {
+        if (modalidadesPresentes[mod]) {
+          erros.push(
+            'condicoes_pagamento.' + mod + ': ausente para produtos existentes da modalidade',
+          )
+        }
+        return
+      }
+      var onde = 'condicoes_pagamento.' + mod
+      pegaPerc(cond.perc_entrada, onde + '.perc_entrada')
+      if (!isNum(Number(cond.parcelas_entrada)) || Number(cond.parcelas_entrada) < 1)
+        erros.push(onde + '.parcelas_entrada: deve ser inteiro >= 1')
+      if (!isNum(Number(cond.mes_primeira_saldo)) || Number(cond.mes_primeira_saldo) < 0)
         erros.push(
-          onde +
-            '.cancelamento.prazo_devolucao: deve ser >= 1 (meses APÓS o cancelamento em mes_medio)',
+          onde + '.mes_primeira_saldo: deve ser inteiro >= 0 (0 = primeira parcela do saldo em M0)',
         )
+      if (!isNum(Number(cond.parcelas_saldo)) || Number(cond.parcelas_saldo) < 0)
+        erros.push(onde + '.parcelas_saldo: deve ser >= 0')
     }
-    var inad = cfg.inadimplencia
-    if (inad) {
-      pegaPerc(inad.taxa, onde + '.inadimplencia.taxa')
-      pegaPerc(inad.parcela_recuperavel, onde + '.inadimplencia.parcela_recuperavel')
-      if (!isNum(Number(inad.prazo_recuperacao)) || Number(inad.prazo_recuperacao) < 1)
-        erros.push(onde + '.inadimplencia.prazo_recuperacao: deve ser >= 1')
-    }
+    validaCond('multipropriedade')
+    validaCond('timeshare')
   }
-  validaCancInad('multipropriedade')
-  validaCancInad('timeshare')
+
+  // Sem defaults inventados: cancelamentos_inadimplencia ausente é bloqueante
+  if (!ci || typeof ci !== 'object') {
+    erros.push('cancelamentos_inadimplencia: ausente ou não informado (pendência bloqueante)')
+  } else {
+    function validaCancInad(mod) {
+      var cfg = ci[mod]
+      if (!cfg) {
+        if (modalidadesPresentes[mod]) {
+          erros.push(
+            'cancelamentos_inadimplencia.' +
+              mod +
+              ': ausente para produtos existentes da modalidade',
+          )
+        }
+        return
+      }
+      var onde = 'cancelamentos_inadimplencia.' + mod
+      var c = cfg.cancelamento
+      if (c) {
+        pegaPerc(c.taxa, onde + '.cancelamento.taxa')
+        if (!isNum(Number(c.mes_medio)) || Number(c.mes_medio) < 0)
+          erros.push(onde + '.cancelamento.mes_medio: deve ser >= 0')
+        pegaPerc(c.taxa_devolucao, onde + '.cancelamento.taxa_devolucao')
+        if (!isNum(Number(c.prazo_devolucao)) || Number(c.prazo_devolucao) < 1)
+          erros.push(
+            onde +
+              '.cancelamento.prazo_devolucao: deve ser >= 1 (meses APÓS o cancelamento em mes_medio)',
+          )
+      }
+      var inad = cfg.inadimplencia
+      if (inad) {
+        pegaPerc(inad.taxa, onde + '.inadimplencia.taxa')
+        pegaPerc(inad.parcela_recuperavel, onde + '.inadimplencia.parcela_recuperavel')
+        if (!isNum(Number(inad.prazo_recuperacao)) || Number(inad.prazo_recuperacao) < 1)
+          erros.push(onde + '.inadimplencia.prazo_recuperacao: deve ser >= 1')
+      }
+    }
+    validaCancInad('multipropriedade')
+    validaCancInad('timeshare')
+  }
 
   if (!Array.isArray(rem)) erros.push('remuneracoes deve ser lista')
   else {
@@ -297,13 +352,12 @@ function vb_validarPremissas(premissas, horizonte) {
         erros.push(onde + ': adicional_ou_compensavel deve ser "adicional" ou "compensavel"')
       pegaVM(r.valor, onde + '.valor')
       if (
-        (r.tipo === 'perc_vgv' || r.tipo === 'perc_recebimento') &&
+        (r.tipo === 'perc_vgv' || r.tipo === 'perc_recebimento' || r.tipo === 'retencao_entrada') &&
         isNum(rv(r.valor)) &&
         (rv(r.valor) < 0 || rv(r.valor) > 1)
       )
         erros.push(onde + '.valor: percentual deve estar entre 0% e 100%')
-      if ((r.tipo === 'fixo' || r.tipo === 'retencao_entrada') && rv(r.valor) < 0)
-        erros.push(onde + '.valor: não pode ser negativo')
+      if (r.tipo === 'fixo' && rv(r.valor) < 0) erros.push(onde + '.valor: não pode ser negativo')
     })
   }
 
@@ -316,6 +370,11 @@ function vb_validarPremissas(premissas, horizonte) {
         erros.push(onde + ': tipo inválido "' + d.tipo + '"')
       if (['comercializadora', 'empreendimento'].indexOf(d.responsavel_economico) < 0)
         erros.push(onde + ': responsavel_economico deve ser "comercializadora" ou "empreendimento"')
+      if (
+        d.pagador_inicial &&
+        ['comercializadora', 'empreendimento'].indexOf(d.pagador_inicial) < 0
+      )
+        erros.push(onde + ': pagador_inicial deve ser "comercializadora" ou "empreendimento"')
       pegaVM(d.valor, onde + '.valor')
       if (d.tipo === 'perc_vgv' && isNum(rv(d.valor)) && (rv(d.valor) < 0 || rv(d.valor) > 1))
         erros.push(onde + '.valor: percentual deve estar entre 0% e 100%')
@@ -370,7 +429,10 @@ function vb_validarPremissas(premissas, horizonte) {
     })
   }
 
-  if (caixa) {
+  // Sem defaults inventados: caixa_inicial ausente é bloqueante
+  if (!caixa || typeof caixa !== 'object') {
+    erros.push('caixa_inicial: ausente ou não informado (pendência bloqueante)')
+  } else {
     if (isNum(Number(caixa.comercializadora))) {
       if (Number(caixa.comercializadora) < 0)
         erros.push('caixa_inicial.comercializadora: não pode ser negativo')
@@ -385,8 +447,6 @@ function vb_validarPremissas(premissas, horizonte) {
 }
 
 // ---------- Motor determinístico ----------
-// Calcula a simulação a partir das premissas (validação roda antes: premissa
-// inválida lança Error com mensagem explicativa — nunca resultado zero/sucesso).
 function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
   var errosValidacao = vb_validarPremissas(premissas, horizonteMeses)
   if (errosValidacao.length > 0) {
@@ -485,6 +545,7 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
           comparecidos_demanda: comparecidos,
           taxa_conversao_venda: taxaConvVenda,
           custo_transporte_unit: rv(ponto.custo_transporte_unitario, m),
+          responsavel_transporte: ponto.responsavel_transporte || 'comercializadora',
         }
       })
 
@@ -514,6 +575,7 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
           taxa_conversao_venda: pd.taxa_conversao_venda,
           vendas_potenciais: vendasPotenciais,
           custo_transporte_total: atendimentosEfetivos * pd.custo_transporte_unit,
+          responsavel_transporte: pd.responsavel_transporte,
         }
       })
 
@@ -609,11 +671,10 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
       cobrancasEsperadas[mesCobr][grupo.mod][tipo] += valor
       cobrancasEsperadas[mesCobr][grupo.mod].bruto += valor
       cobrancasEsperadas[mesCobr].total_bruto += valor
-    } else {
-      // cobrança futura além do horizonte: recebível de carteira (conciliação)
-      carteiraAlemHorizonte[grupo.mod] += valor
-      carteiraAlemHorizonte.total += valor
     }
+    // Nota: NÃO acumulamos em carteiraAlemHorizonte aqui!
+    // A carteira além do horizonte é calculada após cancelamento e inadimplência no passo 3,
+    // para não contar duas vezes e refletir os contratos ativos líquidos.
   }
 
   vendasMesProduto.forEach(function (venda) {
@@ -628,7 +689,6 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
 
     var percEntrada = Number(cond.perc_entrada || 0)
     var numParcEntrada = Math.max(1, Math.round(Number(cond.parcelas_entrada || 1)))
-    // M0 é válido: 0 permanece 0; só a ausência herda o comportamento padrão (1)
     var mesPrimSaldo = Math.max(
       0,
       Math.round(
@@ -658,8 +718,15 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
     }
   })
 
-  // ===== 3. Cancelamento e inadimplência por GRUPO DE VENDA (mes_medio desde a venda) =====
+  // ===== 3. Cancelamento e inadimplência: divisão em fração ativa e cancelada =====
+  // a) Cancelamento: cada grupo de venda é dividido em fração cancelada (taxaCanc) e fração ativa (1 - taxaCanc).
+  //    Só a fração cancelada perde as cobranças a partir de mesCancelamento = grupo.mes + mesMedio.
+  //    Valores já recebidos antes permanecem no mês em que entraram.
+  // b) Devolução = recebido líquido da fração cancelada antes do cancelamento × taxaDevolucao,
+  //    paga em mesCancelamento + prazoDevolucao como saída separada.
+  // c) Carteira além do horizonte reflete apenas o saldo das parcelas que realmente serão cobradas.
   var recebimentosEfetivos = {}
+  var recebimentosEntradaEfetivos = {} // base específica para retenção de entrada
   var devolucoesAgendadas = {}
   var recuperacoesAgendadas = {}
 
@@ -672,6 +739,7 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
       inadimplencia_perdida: 0,
       inadimplencia_recuperada: 0,
     }
+    recebimentosEntradaEfetivos[r1] = 0
     devolucoesAgendadas[r1] = 0
     recuperacoesAgendadas[r1] = 0
   }
@@ -704,36 +772,84 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
       Math.round(Number(inadConf.prazo_recuperacao === undefined ? 1 : inadConf.prazo_recuperacao)),
     )
 
+    var fracAtiva = 1 - taxaCanc
+    var fracCanc = taxaCanc
+
     gruposVenda.forEach(function (grupo) {
       if (grupo.mod !== mod) return
       var mesCancelamento = grupo.mes + mesMedio
-      var recebidoElegivel = 0 // recebido ANTES do cancelamento — base da devolução
+      var recebidoCancLiquidoAntes = 0 // recebido líquido da fração cancelada antes do cancelamento
+
       grupo.cobrancas.forEach(function (cob) {
-        if (cob.mes >= mesCancelamento) return // cancelada: sem nova cobrança/dedução de VGV
-        var inad = cob.valor * taxaInad
-        var recup = inad * percRecup
-        var perda = inad - recup
-        recebidoElegivel += cob.valor
-        if (cob.mes < horizonte) {
-          recebimentosEfetivos[cob.mes][mod] += cob.valor - inad
-          recebimentosEfetivos[cob.mes].total_recebido += cob.valor - inad
-          recebimentosEfetivos[cob.mes].inadimplencia_perdida += perda
-        } else {
-          carteiraAlemHorizonte[mod] += cob.valor - inad
-          carteiraAlemHorizonte.total += cob.valor - inad
-        }
-        var mesRecup = cob.mes + prazoRecup
-        if (recup > 0) {
-          if (mesRecup < horizonte) {
-            recuperacoesAgendadas[mesRecup] += recup
+        // Fração ativa: recebe cobrança em todos os meses (antes e depois do mesCancelamento)
+        if (fracAtiva > 0) {
+          var valAtivo = cob.valor * fracAtiva
+          var inadAtivo = valAtivo * taxaInad
+          var recupAtivo = inadAtivo * percRecup
+          var perdaAtivo = inadAtivo - recupAtivo
+          var recLiqAtivo = valAtivo - inadAtivo
+
+          if (cob.mes < horizonte) {
+            recebimentosEfetivos[cob.mes][mod] += recLiqAtivo
+            recebimentosEfetivos[cob.mes].total_recebido += recLiqAtivo
+            recebimentosEfetivos[cob.mes].inadimplencia_perdida += perdaAtivo
+            if (cob.tipo === 'entrada') {
+              recebimentosEntradaEfetivos[cob.mes] += recLiqAtivo
+            }
           } else {
-            carteiraAlemHorizonte.recuperacoes_a_receber_alem += recup
+            carteiraAlemHorizonte[mod] += recLiqAtivo
+            carteiraAlemHorizonte.total += recLiqAtivo
+          }
+
+          if (recupAtivo > 0) {
+            var mesRecupAtivo = cob.mes + prazoRecup
+            if (mesRecupAtivo < horizonte) {
+              recuperacoesAgendadas[mesRecupAtivo] += recupAtivo
+            } else {
+              carteiraAlemHorizonte.recuperacoes_a_receber_alem += recupAtivo
+            }
           }
         }
+
+        // Fração cancelada: recebe cobrança APENAS nos meses anteriores a mesCancelamento
+        if (fracCanc > 0) {
+          if (cob.mes < mesCancelamento) {
+            var valCanc = cob.valor * fracCanc
+            var inadCanc = valCanc * taxaInad
+            var recupCanc = inadCanc * percRecup
+            var perdaCanc = inadCanc - recupCanc
+            var recLiqCanc = valCanc - inadCanc
+
+            recebidoCancLiquidoAntes += recLiqCanc
+
+            if (cob.mes < horizonte) {
+              recebimentosEfetivos[cob.mes][mod] += recLiqCanc
+              recebimentosEfetivos[cob.mes].total_recebido += recLiqCanc
+              recebimentosEfetivos[cob.mes].inadimplencia_perdida += perdaCanc
+              if (cob.tipo === 'entrada') {
+                recebimentosEntradaEfetivos[cob.mes] += recLiqCanc
+              }
+            } else {
+              carteiraAlemHorizonte[mod] += recLiqCanc
+              carteiraAlemHorizonte.total += recLiqCanc
+            }
+
+            if (recupCanc > 0) {
+              var mesRecupCanc = cob.mes + prazoRecup
+              if (mesRecupCanc < horizonte) {
+                recuperacoesAgendadas[mesRecupCanc] += recupCanc
+              } else {
+                carteiraAlemHorizonte.recuperacoes_a_receber_alem += recupCanc
+              }
+            }
+          }
+          // se cob.mes >= mesCancelamento: fração cancelada perde as cobranças, nada é cobrado nem vai para carteira
+        }
       })
-      // Devolução sobre o EFETIVAMENTE RECEBIDO, com prazo APÓS o cancelamento
-      if (taxaCanc > 0 && taxaDevolucao > 0 && recebidoElegivel > 0) {
-        var valorDevolver = recebidoElegivel * taxaCanc * taxaDevolucao
+
+      // Devolução: recebido líquido da fração cancelada antes do cancelamento × taxaDevolucao
+      if (fracCanc > 0 && taxaDevolucao > 0 && recebidoCancLiquidoAntes > 0) {
+        var valorDevolver = recebidoCancLiquidoAntes * taxaDevolucao
         var mesDev = mesCancelamento + prazoDevolucao
         if (mesDev < horizonte) {
           devolucoesAgendadas[mesDev] += valorDevolver
@@ -764,14 +880,14 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
   var maiorDeficitEmpreendimento = 0
   var mesMaiorDeficitEmpreendimento = 0
 
+  // f) Fila global de reembolsos entre meses (persistem entre meses até serem quitados)
+  var reembolsosGlobais = [] // { mes, pagador, resp, valor, descricao }
+
   for (var fm = 0; fm < horizonte; fm++) {
     var vgvMes = funilMensal[fm].total_vgv_mes
     var recMes = recebimentosEfetivos[fm].total_recebido
 
-    // Remuneração da comercializadora: fixo + comissões sobre VGV de venda admitida
-    // e sobre recebimentos. "compensável": o empreendimento reembolsa o componente
-    // pago pela comercializadora — entra como custo DO EMPREENDIMENTO e é eliminado
-    // 1:1 no consolidado (por isso compensável ≠ adicional nos resultados).
+    // Remuneração da comercializadora
     var fixoComercialMes = 0
     var percVgvMes = 0
     var percRecebimentoMes = 0
@@ -800,7 +916,6 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
     var custosComercializadoraMes = 0
     var custosEmpreendimentoMes = 0
     var detalhesCustosMes = []
-    var reembolsosPendentes = []
 
     custosDespesas.forEach(function (cdItem) {
       var valorItem = 0
@@ -817,12 +932,10 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
       })
 
       if (!temEscopo) {
-        // Sem escopo: consolidado do mês (todas as salas)
         atendimentosEscopo = funilMensal[fm].total_atendimentos_mes
         vendasEscopo = funilMensal[fm].total_vendas_mes
         vgvEscopo = vgvMes
       } else if (salaEscopo) {
-        // Escopo por sala: usa APENOS dados dessa sala (não o consolidado do mês)
         atendimentosEscopo = salaEscopo.atendimentos_efetivos
         vendasMesProduto.forEach(function (v) {
           if (v.mes === fm && v.sala_id === cdItem.sala_id) {
@@ -837,7 +950,7 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
               atendPonto = pt.atendimentos_efetivos
             }
           })
-          atendimentosEscopo = atendPonto // ponto restringe ATENDIMENTOS (mix é por sala)
+          atendimentosEscopo = atendPonto
         }
       }
 
@@ -861,6 +974,7 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
         ),
       )
       var mesPagamento = fm + prazo
+
       detalhesCustosMes.push({
         mes_competencia: fm,
         mes_pagamento: mesPagamento,
@@ -869,15 +983,15 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
         pagador: pagador,
         base: tipo === 'fixo' ? 'valor fixo mensal' : tipo,
       })
-      if (mesPagamento < horizonte) {
+
+      if (mesPagamento === fm) {
         if (pagador === 'comercializadora') custosComercializadoraMes += valorItem
         else custosEmpreendimentoMes += valorItem
-      } else {
-        // despesa competida dentro do horizonte com pagamento além dele
+      } else if (mesPagamento >= horizonte) {
         carteiraAlemHorizonte.despesas_a_pagar_alem += valorItem
       }
-      // Reembolso: pagador ≠ responsável — o responsável reembolsa o pagador
-      // (mesPagamento + prazo_reembolso)
+
+      // Reembolso futuro: pagador ≠ responsável
       if (pagador !== resp) {
         var prazoReemb = Math.max(
           0,
@@ -886,23 +1000,120 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
           ),
         )
         var mesReemb = mesPagamento + prazoReemb
-        reembolsosPendentes.push({
+        reembolsosGlobais.push({
           mes: mesReemb,
           pagador: pagador,
           resp: resp,
           valor: valorItem,
+          descricao: 'Reembolso de despesa paga antecipadamente por ' + pagador,
         })
       }
     })
+
+    // Adiciona custos com pagamento diferido agendado para o mês atual
+    // (quando prazo_pagamento_meses > 0, foi registrado na competência anterior)
+    // Para simplificar e evitar duplicação, os custos com prazo foram calculados acima.
+    // Vamos garantir que custos de competências anteriores com mesPagamento === fm entrem no caixa:
+    // (Ajuste direto: percorrer meses anteriores seria O(H²), simples de fazer)
+    for (var mPrev = 0; mPrev < fm; mPrev++) {
+      custosDespesas.forEach(function (cdPrev) {
+        var prazoP = Math.max(
+          0,
+          Math.round(
+            Number(cdPrev.prazo_pagamento_meses === undefined ? 0 : cdPrev.prazo_pagamento_meses),
+          ),
+        )
+        if (mPrev + prazoP !== fm) return
+        var pagadorP = cdPrev.pagador_inicial || cdPrev.responsavel_economico || 'comercializadora'
+        var vUnitP = rv(cdPrev.valor, mPrev)
+        var valorItemP = 0
+        var tipoP = cdPrev.tipo
+
+        var atendEscP = 0
+        var vendEscP = 0
+        var vgvEscP = 0
+        var temEscP = !!cdPrev.sala_id || !!cdPrev.ponto_id
+        var salaEscP = null
+        funilMensal[mPrev].salas.forEach(function (s) {
+          if (cdPrev.sala_id && s.sala_id === cdPrev.sala_id) salaEscP = s
+        })
+
+        if (!temEscP) {
+          atendEscP = funilMensal[mPrev].total_atendimentos_mes
+          vendEscP = funilMensal[mPrev].total_vendas_mes
+          vgvEscP = funilMensal[mPrev].total_vgv_mes
+        } else if (salaEscP) {
+          atendEscP = salaEscP.atendimentos_efetivos
+          vendasMesProduto.forEach(function (v) {
+            if (v.mes === mPrev && v.sala_id === cdPrev.sala_id) {
+              vendEscP += v.admitido
+              vgvEscP += v.vgv
+            }
+          })
+          if (cdPrev.ponto_id) {
+            salaEscP.pontos.forEach(function (pt) {
+              if (pt.ponto_id === cdPrev.ponto_id) atendEscP = pt.atendimentos_efetivos
+            })
+          }
+        }
+
+        if (tipoP === 'fixo') valorItemP = vUnitP
+        else if (tipoP === 'por_atendimento') valorItemP = atendEscP * vUnitP
+        else if (tipoP === 'por_venda') valorItemP = vendEscP * vUnitP
+        else if (tipoP === 'perc_vgv') valorItemP = vgvEscP * vUnitP
+
+        if (valorItemP > 0) {
+          if (pagadorP === 'comercializadora') custosComercializadoraMes += valorItemP
+          else custosEmpreendimentoMes += valorItemP
+        }
+      })
+    }
+
+    // g) Transporte: parte responsável informada por ponto (não usar "maior pagador" e não lançar como transferência interna)
+    // É custo operacional direto da parte responsável (comercializadora ou empreendimento).
+    var transportePorResponsavel = { comercializadora: 0, empreendimento: 0 }
+    funilMensal[fm].salas.forEach(function (s) {
+      s.pontos.forEach(function (pt) {
+        if (pt.custo_transporte_total > 0) {
+          var respTrans = pt.responsavel_transporte || 'comercializadora'
+          if (respTrans === 'empreendimento') {
+            transportePorResponsavel.empreendimento += pt.custo_transporte_total
+          } else {
+            transportePorResponsavel.comercializadora += pt.custo_transporte_total
+          }
+        }
+      })
+    })
+
+    if (transportePorResponsavel.comercializadora > 0) {
+      custosComercializadoraMes += transportePorResponsavel.comercializadora
+      detalhesCustosMes.push({
+        mes_competencia: fm,
+        mes_pagamento: fm,
+        valor: transportePorResponsavel.comercializadora,
+        responsavel: 'comercializadora',
+        pagador: 'comercializadora',
+        base: 'transporte de captação (comercializadora)',
+      })
+    }
+    if (transportePorResponsavel.empreendimento > 0) {
+      custosEmpreendimentoMes += transportePorResponsavel.empreendimento
+      detalhesCustosMes.push({
+        mes_competencia: fm,
+        mes_pagamento: fm,
+        valor: transportePorResponsavel.empreendimento,
+        responsavel: 'empreendimento',
+        pagador: 'empreendimento',
+        base: 'transporte de captação (empreendimento)',
+      })
+    }
 
     var somaPercVgv = percVgvMes + compensavelPercVgvMes
     var somaPercRecebimento = percRecebimentoMes + compensavelPercRecebimentoMes
     var comissaoVendaMes = vgvMes * somaPercVgv
     var comissaoRecebimentoMes = recMes * somaPercRecebimento
-    // Remuneração total = adicional + compensável; retenção limita o que é repassado
     var remuneracaoComercial =
       fixoComercialMes + compensavelFixoMes + comissaoVendaMes + comissaoRecebimentoMes
-    // remuneracaoAdicionalMes referencia o que é SEMPRE da comercializadora
     var remuneracaoAdicionalMes = fixoComercialMes + comissaoVendaMes + comissaoRecebimentoMes
 
     var investComercializadora = 0
@@ -917,42 +1128,51 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
 
     var devolucoesMes = recebimentosEfetivos[fm].devolucoes_pagas
 
-    // ===== Retenção de entrada: sobre a entrada EFETIVAMENTE RECEBIDA =====
-    // A base é o que os compradores pagaram de entrada (líquido de inadimplência)
-    // no mês — SEM recuperações agendadas de parcelas antigas em atraso.
-    var baseRetencaoMes =
-      recebimentosEfetivos[fm].multipropriedade + recebimentosEfetivos[fm].timeshare
-    var retencaoEntradaMes = baseRetencaoMes * somaRetencaoEntrada
-    // A retenção transfere CAIXA do empreendimento (não é remuneração); limitada à
-    // remuneração a pagar; o excedente fica no empreendimento e é reportado.
+    // e) Retenção de entrada: base = só a entrada efetivamente RECEBIDA (não a cobrada).
+    // Retenção é forma de pagamento da remuneração, não remuneração adicional.
+    var baseEntradaRecebida = recebimentosEntradaEfetivos[fm] || 0
+    var retencaoEntradaMes = baseEntradaRecebida * somaRetencaoEntrada
     var retencaoAplicada = Math.min(retencaoEntradaMes, remuneracaoComercial)
     var retencaoNaoAplicada = retencaoEntradaMes - retencaoAplicada
     var repasseLiquidoMes = remuneracaoComercial - retencaoAplicada
 
-    reembolsosPendentes.forEach(function (r) {
+    // Reembolsos quitados neste mês (f: persistem entre meses até serem quitados)
+    var liquidacaoReembolsoMes = 0 // positivo = empreendimento paga para comercializadora
+    reembolsosGlobais.forEach(function (r) {
       if (r.mes === fm) {
-        if (r.resp === 'empreendimento') {
-          repasseLiquidoMes -= r.valor
-        } else {
-          repasseLiquidoMes += r.valor
+        if (r.pagador === 'comercializadora' && r.resp === 'empreendimento') {
+          liquidacaoReembolsoMes += r.valor
+          transferenciasInternas.push({
+            mes: fm,
+            de: 'empreendimento',
+            para: 'comercializadora',
+            valor: r.valor,
+            descricao: r.descricao,
+          })
+        } else if (r.pagador === 'empreendimento' && r.resp === 'comercializadora') {
+          liquidacaoReembolsoMes -= r.valor
+          transferenciasInternas.push({
+            mes: fm,
+            de: 'comercializadora',
+            para: 'empreendimento',
+            valor: r.valor,
+            descricao: r.descricao,
+          })
         }
-        transferenciasInternas.push({
-          mes: fm,
-          de: r.resp,
-          para: r.pagador,
-          valor: r.valor,
-          descricao: 'Reembolso de despesa paga antecipadamente por ' + r.pagador,
-        })
       }
     })
 
-    var entradasEmpreendimento = recMes
+    // Fluxo do Empreendimento:
+    // Entradas: recebimentos dos compradores + reembolsos recebidos da comercializadora (se liquidacao < 0)
+    // Saídas: repasse comercial + custos próprios + devoluções + investimentos + reembolsos pagos à comercializadora (se liquidacao > 0)
+    // Nota: retencaoAplicada já foi retida pela comercializadora na entrada, logo não é desembolso do empreendimento!
+    var entradasEmpreendimento = recMes + (liquidacaoReembolsoMes < 0 ? -liquidacaoReembolsoMes : 0)
     var saidasEmpreendimento =
       repasseLiquidoMes +
-      retencaoAplicada +
       custosEmpreendimentoMes +
       devolucoesMes +
-      investEmpreendimento
+      investEmpreendimento +
+      (liquidacaoReembolsoMes > 0 ? liquidacaoReembolsoMes : 0)
     var fluxoLiquidoEmpreendimento = entradasEmpreendimento - saidasEmpreendimento
     saldoAcumuladoEmpreendimento += fluxoLiquidoEmpreendimento
 
@@ -961,47 +1181,21 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
       mesMaiorDeficitEmpreendimento = fm
     }
 
-    var entradasComercial = remuneracaoComercial
-    var saidasComercial = custosComercializadoraMes + investComercializadora
+    // Fluxo da Comercializadora:
+    // Entradas: remuneração recebida (repasseLiquidoMes + retencaoAplicada = remuneracaoComercial) + reembolsos recebidos (se liquidacao > 0)
+    // Saídas: custos da comercializadora + investimentos + reembolsos pagos ao empreendimento (se liquidacao < 0)
+    var entradasComercial =
+      remuneracaoComercial + (liquidacaoReembolsoMes > 0 ? liquidacaoReembolsoMes : 0)
+    var saidasComercial =
+      custosComercializadoraMes +
+      investComercializadora +
+      (liquidacaoReembolsoMes < 0 ? -liquidacaoReembolsoMes : 0)
     var fluxoLiquidoComercial = entradasComercial - saidasComercial
     saldoAcumuladoComercializadora += fluxoLiquidoComercial
 
     if (saldoAcumuladoComercializadora < maiorDeficitComercializadora) {
       maiorDeficitComercializadora = saldoAcumuladoComercializadora
       mesMaiorDeficitComercializadora = fm
-    }
-
-    // Transporte: despesa de operação, lançada UMA ÚNICA VEZ no caixa da parte que
-    // a assume (aqui: pagador maior do mês), NUNCA somando por ponto de captação.
-    var transporteMes = 0
-    funilMensal[fm].salas.forEach(function (s) {
-      s.pontos.forEach(function (pt) {
-        transporteMes += pt.custo_transporte_total
-      })
-    })
-    if (transporteMes > 0) {
-      var pagadorTransporte =
-        custosComercializadoraMes >= custosEmpreendimentoMes ? 'comercializadora' : 'empreendimento'
-      if (pagadorTransporte === 'comercializadora') {
-        custosComercializadoraMes += transporteMes
-      } else {
-        custosEmpreendimentoMes += transporteMes
-      }
-      detalhesCustosMes.push({
-        mes_competencia: fm,
-        mes_pagamento: fm,
-        valor: transporteMes,
-        responsavel: pagadorTransporte,
-        pagador: pagadorTransporte,
-        base: 'transporte (por atendimento, uma vez por ponto, lançado uma única vez)',
-      })
-      transferenciasInternas.push({
-        mes: fm,
-        de: pagadorTransporte,
-        para: 'transporte',
-        valor: transporteMes,
-        descricao: 'Custo de transporte dos atendimentos do mês (lançado uma única vez no caixa)',
-      })
     }
 
     if (repasseLiquidoMes !== 0) {
@@ -1017,19 +1211,22 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
       transferenciasInternas.push({
         mes: fm,
         de: 'empreendimento',
-        para: 'retencao_caixa',
+        para: 'comercializadora',
         valor: retencaoAplicada,
-        descricao: 'Retenção de entrada sobre remuneração a pagar',
+        descricao: 'Retenção de entrada aplicada como remuneração',
       })
     }
 
     fluxosComercializadora.push({
       mes: fm,
-      receita_remuneracao: entradasComercial - retencaoAplicada,
+      receita_remuneracao: remuneracaoComercial,
       custos_operacionais: custosComercializadoraMes,
       investimentos: investComercializadora,
+      reembolsos_recebidos: liquidacaoReembolsoMes > 0 ? liquidacaoReembolsoMes : 0,
+      reembolsos_pagos: liquidacaoReembolsoMes < 0 ? -liquidacaoReembolsoMes : 0,
       fluxo_liquido: fluxoLiquidoComercial,
       saldo_acumulado: saldoAcumuladoComercializadora,
+      retencao_aplicada: retencaoAplicada,
       retencao_nao_aplicada: retencaoNaoAplicada,
       remuneracao_adicional: remuneracaoAdicionalMes,
       detalhes_custos: detalhesCustosMes,
@@ -1037,11 +1234,13 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
 
     fluxosEmpreendimento.push({
       mes: fm,
-      recebimentos_brutos: entradasEmpreendimento,
+      recebimentos_brutos: recMes,
       repasse_comercial: repasseLiquidoMes,
       custos_proprios: custosEmpreendimentoMes,
       devolucoes: devolucoesMes,
       investimentos: investEmpreendimento,
+      reembolsos_pagos: liquidacaoReembolsoMes > 0 ? liquidacaoReembolsoMes : 0,
+      reembolsos_recebidos: liquidacaoReembolsoMes < 0 ? -liquidacaoReembolsoMes : 0,
       fluxo_liquido: fluxoLiquidoEmpreendimento,
       saldo_acumulado: saldoAcumuladoEmpreendimento,
     })
@@ -1065,8 +1264,8 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
   var totalReceitaComercial = 0
   var totalCustosComercial = 0
   fluxosComercializadora.forEach(function (f) {
-    totalReceitaComercial += f.receita_remuneracao
-    totalCustosComercial += f.custos_operacionais
+    totalReceitaComercial += f.receita_remuneracao + (f.reembolsos_recebidos || 0)
+    totalCustosComercial += f.custos_operacionais + (f.reembolsos_pagos || 0)
   })
   var resultadoGerencialComercial = totalReceitaComercial - totalCustosComercial
   var totalInvestEmpreendimento = 0
@@ -1074,7 +1273,7 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
   var totalRepasses = 0
   fluxosEmpreendimento.forEach(function (f) {
     totalInvestEmpreendimento += f.investimentos
-    totalCustosEmpreendimento += f.custos_proprios
+    totalCustosEmpreendimento += f.custos_proprios + (f.reembolsos_pagos || 0)
     totalRepasses += f.repasse_comercial
   })
 
@@ -1130,12 +1329,25 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
   }
 }
 
-// Exportação para os dois runtimes: JSVM (globalThis) e módulo ES (navegador).
+// Exportação para os dois runtimes: JSVM (globalThis / CommonJS) e módulo ES (navegador).
 if (typeof globalThis !== 'undefined') {
   globalThis.vb_resolverValorMes = vb_resolverValorMes
   globalThis.vb_formatarBRL = vb_formatarBRL
   globalThis.vb_formatarPorcentagem = vb_formatarPorcentagem
   globalThis.vb_validarPremissas = vb_validarPremissas
   globalThis.vb_calcularSimulacao = vb_calcularSimulacao
+  globalThis.vb_gerarHashPremissas = vb_gerarHashPremissas
   globalThis.VB_MOTOR_VERSAO = VB_MOTOR_VERSAO
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    vb_resolverValorMes: vb_resolverValorMes,
+    vb_formatarBRL: vb_formatarBRL,
+    vb_formatarPorcentagem: vb_formatarPorcentagem,
+    vb_validarPremissas: vb_validarPremissas,
+    vb_calcularSimulacao: vb_calcularSimulacao,
+    vb_gerarHashPremissas: vb_gerarHashPremissas,
+    VB_MOTOR_VERSAO: VB_MOTOR_VERSAO,
+  }
 }
