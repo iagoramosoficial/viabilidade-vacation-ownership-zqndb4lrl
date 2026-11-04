@@ -9,7 +9,7 @@ routerAdd('POST', '/backend/v1/viabilidade/simular', (e) => {
   }
 
   const userId = info.auth.id
-  const body = e.bindBody({})
+  const body = (info && info.body) || {}
   const cenarioId = body.cenario_id
 
   if (!cenarioId) {
@@ -669,7 +669,7 @@ routerAdd('POST', '/backend/v1/viabilidade/duplicar-cenario', (e) => {
   }
 
   const userId = info.auth.id
-  const body = e.bindBody({})
+  const body = (info && info.body) || {}
   const cenarioOrigemId = body.cenario_id
   const novoNome = (body.novo_nome || '').trim()
 
@@ -833,14 +833,23 @@ routerAdd('POST', '/backend/v1/admin/empresas', (e) => {
     return e.json(403, { error: 'Acesso restrito a administradores master' })
   }
 
-  const body = e.bindBody({})
+  const body = (info && info.body) || {}
   const nome = (body.nome || '').trim()
-  const cnpj = (body.cnpj || '').trim()
+  const rawCnpj = (body.cnpj || '').trim()
   const usuarioVinculoId = (body.usuario_id || '').trim() || callerId
   const roleVinculo = (body.role || 'admin_master').trim()
 
   if (!nome) {
-    return e.json(400, { error: 'Nome da empresa é obrigatório' })
+    return e.json(400, { error: 'Informe o nome da empresa' })
+  }
+
+  // CNPJ é opcional. Se informado, validar formato (apenas dígitos ou formato padrão com 14 dígitos)
+  let cnpjLimpo = ''
+  if (rawCnpj) {
+    cnpjLimpo = rawCnpj.replace(/[^\d]/g, '')
+    if (cnpjLimpo.length !== 14) {
+      return e.json(400, { error: 'CNPJ inválido. Informe os 14 dígitos ou deixe em branco.' })
+    }
   }
 
   // Validar se o usuário do vínculo existe
@@ -860,7 +869,11 @@ routerAdd('POST', '/backend/v1/admin/empresas', (e) => {
     const empresasCol = $app.findCollectionByNameOrId('empresas')
     const novaEmpresa = new Record(empresasCol)
     novaEmpresa.set('nome', nome)
-    if (cnpj) novaEmpresa.set('cnpj', cnpj)
+    if (cnpjLimpo) {
+      novaEmpresa.set('cnpj', cnpjLimpo)
+    } else {
+      novaEmpresa.set('cnpj', '')
+    }
     novaEmpresa.set('criador', callerId)
     $app.save(novaEmpresa)
 
@@ -910,7 +923,7 @@ routerAdd('POST', '/backend/v1/admin/usuarios', (e) => {
     return e.json(403, { error: 'Acesso restrito a administradores master' })
   }
 
-  const body = e.bindBody({})
+  const body = (info && info.body) || {}
   const email = (body.email || '').trim().toLowerCase()
   const password = (body.password || '').trim()
   const name = (body.name || '').trim()
