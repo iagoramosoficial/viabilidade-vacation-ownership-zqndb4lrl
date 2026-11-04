@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-04T03:04:45.735Z",
+  "generatedAt": "2026-11-04T03:45:33.880Z",
   "collections": [
     {
       "name": "users",
@@ -48,11 +48,11 @@
       "name": "empresas",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != '' && criador = @request.auth.id",
-        "delete": "@request.auth.id != '' && criador = @request.auth.id"
+        "list": "@request.auth.id != \"\" && (criador = @request.auth.id || empresa_membros_via_empresa.user ?= @request.auth.id)",
+        "view": "@request.auth.id != \"\" && (criador = @request.auth.id || empresa_membros_via_empresa.user ?= @request.auth.id)",
+        "create": null,
+        "update": "@request.auth.id != \"\" && criador = @request.auth.id",
+        "delete": null
       },
       "fields": [
         {
@@ -95,9 +95,9 @@
       "name": "empresa_membros",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && user = @request.auth.id",
-        "view": "@request.auth.id != '' && user = @request.auth.id",
-        "create": "@request.auth.id != '' && user = @request.auth.id",
+        "list": "@request.auth.id != \"\" && user = @request.auth.id",
+        "view": "@request.auth.id != \"\" && user = @request.auth.id",
+        "create": null,
         "update": null,
         "delete": null
       },
@@ -147,11 +147,11 @@
       "name": "estudos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "list": "@request.auth.id != \"\" && empresa.empresa_membros_via_empresa.user ?= @request.auth.id",
+        "view": "@request.auth.id != \"\" && empresa.empresa_membros_via_empresa.user ?= @request.auth.id",
+        "create": "@request.auth.id != \"\" && empresa.empresa_membros_via_empresa.user ?= @request.auth.id && empresa.empresa_membros_via_empresa.role ?!= 'viewer'",
+        "update": "@request.auth.id != \"\" && empresa.empresa_membros_via_empresa.user ?= @request.auth.id && empresa.empresa_membros_via_empresa.role ?!= 'viewer'",
+        "delete": "@request.auth.id != \"\" && empresa.empresa_membros_via_empresa.user ?= @request.auth.id && empresa.empresa_membros_via_empresa.role ?!= 'viewer'"
       },
       "fields": [
         {
@@ -235,11 +235,11 @@
       "name": "cenarios",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "list": "@request.auth.id != \"\" && estudo.empresa.empresa_membros_via_empresa.user ?= @request.auth.id",
+        "view": "@request.auth.id != \"\" && estudo.empresa.empresa_membros_via_empresa.user ?= @request.auth.id",
+        "create": "@request.auth.id != \"\" && estudo.empresa.empresa_membros_via_empresa.user ?= @request.auth.id && estudo.empresa.empresa_membros_via_empresa.role ?!= 'viewer'",
+        "update": "@request.auth.id != \"\" && estudo.empresa.empresa_membros_via_empresa.user ?= @request.auth.id && estudo.empresa.empresa_membros_via_empresa.role ?!= 'viewer'",
+        "delete": "@request.auth.id != \"\" && estudo.empresa.empresa_membros_via_empresa.user ?= @request.auth.id && estudo.empresa.empresa_membros_via_empresa.role ?!= 'viewer'"
       },
       "fields": [
         {
@@ -306,11 +306,11 @@
       "name": "simulacoes",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "list": "@request.auth.id != \"\" && cenario.estudo.empresa.empresa_membros_via_empresa.user ?= @request.auth.id",
+        "view": "@request.auth.id != \"\" && cenario.estudo.empresa.empresa_membros_via_empresa.user ?= @request.auth.id",
+        "create": null,
+        "update": null,
+        "delete": null
       },
       "fields": [
         {
