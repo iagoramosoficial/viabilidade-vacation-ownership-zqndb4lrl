@@ -121,17 +121,19 @@ export const Header: React.FC = () => {
                 <FolderKanban className="h-4 w-4" />
                 Meus Estudos
               </Link>
-              <Link
-                to="/testes"
-                className={`transition-colors hover:text-foreground/80 flex items-center gap-1.5 ${
-                  location.pathname === '/testes'
-                    ? 'text-foreground font-semibold'
-                    : 'text-foreground/60'
-                }`}
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Testes Sintéticos (10)
-              </Link>
+              {user.is_master && (
+                <Link
+                  to="/testes"
+                  className={`transition-colors hover:text-foreground/80 flex items-center gap-1.5 ${
+                    location.pathname === '/testes'
+                      ? 'text-foreground font-semibold'
+                      : 'text-foreground/60'
+                  }`}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Autoteste do Motor
+                </Link>
+              )}
             </nav>
           )}
         </div>
@@ -281,10 +283,15 @@ export const Header: React.FC = () => {
                       Painel Admin
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem onClick={() => navigate('/testes')} className="cursor-pointer">
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Testes Sintéticos (10)
-                  </DropdownMenuItem>
+                  {user.is_master && (
+                    <DropdownMenuItem
+                      onClick={() => navigate('/testes')}
+                      className="cursor-pointer"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Autoteste do Motor
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => {

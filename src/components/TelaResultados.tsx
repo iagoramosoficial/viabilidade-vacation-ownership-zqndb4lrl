@@ -6,7 +6,10 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { formatarBRL, formatarPorcentagem } from '@/services/engine'
+import {
+  vb_formatarBRL as formatarBRL,
+  vb_formatarPorcentagem as formatarPorcentagem,
+} from '@/lib/pocketbase/viabilidade_core.mjs'
 import {
   TrendingUp,
   DollarSign,

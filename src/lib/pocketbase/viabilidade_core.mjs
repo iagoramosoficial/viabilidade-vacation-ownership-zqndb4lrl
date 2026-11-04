@@ -180,16 +180,7 @@ function vb_validarPremissas(premissas, horizonte) {
                 erros.push(ondeP + '.' + campo + ': deve estar entre 0% e 100%')
             }
           })
-          if (
-            ponto.etapa_entrada === 'comparecidos' &&
-            ponto.taxa_comparecimento !== undefined &&
-            rv(ponto.taxa_comparecimento) < 1
-          ) {
-            erros.push(
-              ondeP +
-                '.taxa_comparecimento: ignorada quando etapa_entrada = comparecidos (entrada direta); remova-a ou defina 100%',
-            )
-          }
+
           pegaVM(ponto.custo_transporte_unitario, ondeP + '.custo_transporte_unitario')
           if (rv(ponto.custo_transporte_unitario) < 0)
             erros.push(ondeP + '.custo_transporte_unitario: não pode ser negativo')
@@ -1286,13 +1277,35 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
     funil_mensal: funilMensal,
     vendas_mes_produto: vendasMesProduto,
     transferencias_internas: transferenciasInternas,
-    avisos_escopo: [
-      'Aviso: O estoque comercial informado não foi validado por capacidade de direitos/hospedagem.',
-      'Aviso: Valores nominais sem juros/correção nesta etapa preliminar.',
-      'Aviso: Revenda de contratos cancelados não foi simulada; obrigações de uso serão verificadas na etapa de direitos.',
-      'Aviso: Faltam hotelaria completa, direitos/capacidade contratual, tributos, financiamento e encargos ainda não modelados (não são zero no negócio real).',
-      'Aviso: O saldo de caixa após custos comerciais NÃO constitui lucro líquido do empreendimento completo.',
-    ],
+    avisos_escopo: (function () {
+      var lista = [
+        'Aviso: O estoque comercial informado não foi validado por capacidade de direitos/hospedagem.',
+        'Aviso: Valores nominais sem juros/correção nesta etapa preliminar.',
+        'Aviso: Revenda de contratos cancelados não foi simulada; obrigações de uso serão verificadas na etapa de direitos.',
+        'Aviso: Faltam hotelaria completa, direitos/capacidade contratual, tributos, financiamento e encargos ainda não modelados (não são zero no negócio real).',
+        'Aviso: O saldo de caixa após custos comerciais NÃO constitui lucro líquido do empreendimento completo.',
+      ]
+      salas.forEach(function (sala) {
+        if (!sala || !Array.isArray(sala.pontos)) return
+        sala.pontos.forEach(function (ponto) {
+          if (
+            ponto &&
+            ponto.etapa_entrada === 'comparecidos' &&
+            ponto.taxa_comparecimento !== undefined &&
+            ponto.taxa_comparecimento !== null
+          ) {
+            lista.push(
+              'Aviso: No ponto de captação "' +
+                (ponto.nome || ponto.id) +
+                '" (sala "' +
+                (sala.nome || sala.id) +
+                '"), a etapa de entrada é "comparecidos"; a taxa de comparecimento informada foi ignorada para não reaplicá-la.',
+            )
+          }
+        })
+      })
+      return lista
+    })(),
   }
 }
 
