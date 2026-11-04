@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-04T19:02:03.338Z",
+  "generatedAt": "2026-11-04T20:13:41.623Z",
   "collections": [
     {
       "name": "users",
@@ -383,6 +383,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "motor_versao",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": ["CREATE INDEX idx_simulacoes_cenario ON simulacoes (cenario)"]

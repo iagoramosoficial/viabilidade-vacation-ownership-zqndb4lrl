@@ -1126,7 +1126,12 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
       }
     })
 
-    var entradasEmpreendimento = recMes + (liquidacaoReembolsoMes < 0 ? -liquidacaoReembolsoMes : 0)
+    // O valor retido na fonte sai dos recebimentos do empreendimento (a comercializadora
+    // fica com ele na fonte como forma de pagamento da remuneração, não remuneração adicional).
+    // recEmpreendimentoLiquido = recMes - retencaoAplicada
+    var recEmpreendimentoLiquido = recMes - retencaoAplicada
+    var entradasEmpreendimento =
+      recEmpreendimentoLiquido + (liquidacaoReembolsoMes < 0 ? -liquidacaoReembolsoMes : 0)
     var saidasEmpreendimento =
       repasseLiquidoMes +
       custosEmpreendimentoMes +
@@ -1191,7 +1196,7 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
 
     fluxosEmpreendimento.push({
       mes: fm,
-      recebimentos_brutos: recMes,
+      recebimentos_brutos: recEmpreendimentoLiquido,
       repasse_comercial: repasseLiquidoMes,
       custos_proprios: custosEmpreendimentoMes,
       devolucoes: devolucoesMes,
@@ -1228,7 +1233,9 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
   var totalInvestEmpreendimento = 0
   var totalCustosEmpreendimento = 0
   var totalRepasses = 0
+  var totalRecebimentosLiquidosEmpreendimento = 0
   fluxosEmpreendimento.forEach(function (f) {
+    totalRecebimentosLiquidosEmpreendimento += f.recebimentos_brutos
     totalInvestEmpreendimento += f.investimentos
     totalCustosEmpreendimento += f.custos_proprios + (f.reembolsos_pagos || 0)
     totalRepasses += f.repasse_comercial
@@ -1263,7 +1270,7 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
     },
     empreendimento: {
       caixa_inicial: Number(caixasIniciais.empreendimento || 0),
-      recebimentos_brutos_total: totalRecebidoCompradores,
+      recebimentos_brutos_total: totalRecebimentosLiquidosEmpreendimento,
       repasses_comercializadora_total: totalRepasses,
       custos_proprios_total: totalCustosEmpreendimento,
       devolucoes_total: totalDevolucoesPagas,
