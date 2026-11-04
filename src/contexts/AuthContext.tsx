@@ -5,6 +5,7 @@ import type { RecordModel } from 'pocketbase'
 interface AuthContextType {
   user: RecordModel | null
   isLoading: boolean
+  isMaster: boolean
   empresa: RecordModel | null
   membroRole: string
   login: (email: string, pass: string) => Promise<void>
@@ -140,11 +141,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }
 
+  const isMaster = Boolean(user?.is_master)
+
   return (
     <AuthContext.Provider
       value={{
         user,
         isLoading,
+        isMaster,
         empresa,
         membroRole,
         login,

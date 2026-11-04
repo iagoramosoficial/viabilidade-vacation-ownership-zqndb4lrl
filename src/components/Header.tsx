@@ -241,6 +241,20 @@ export const Header: React.FC = () => {
                 {roleLabels[membroRole] || membroRole}
               </Badge>
 
+              {/* Link Admin para Master */}
+              {user.is_master && (
+                <Link to="/admin">
+                  <Button
+                    variant={location.pathname === '/admin' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-9 gap-1.5"
+                  >
+                    <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                    <span className="hidden sm:inline">Admin</span>
+                  </Button>
+                </Link>
+              )}
+
               {/* Menu do Usuário */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -261,6 +275,12 @@ export const Header: React.FC = () => {
                     <div className="text-xs text-muted-foreground truncate">{user.email}</div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  {user.is_master && (
+                    <DropdownMenuItem onClick={() => navigate('/admin')} className="cursor-pointer">
+                      <ShieldCheck className="h-4 w-4 mr-2 text-emerald-500" />
+                      Painel Admin
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => navigate('/testes')} className="cursor-pointer">
                     <CheckCircle2 className="h-4 w-4 mr-2" />
                     Testes Sintéticos (10)

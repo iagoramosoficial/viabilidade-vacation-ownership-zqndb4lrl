@@ -472,30 +472,10 @@ export const MeusEstudos: React.FC = () => {
         <Card className="text-center py-12">
           <CardContent className="space-y-4">
             <Building2 className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
-            <h3 className="font-semibold text-lg">Nenhuma empresa encontrada</h3>
+            <h3 className="font-semibold text-lg">Nenhuma empresa vinculada</h3>
             <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-              Crie ou selecione uma empresa no menu superior para começar a criar estudos.
+              Seu acesso ainda não tem empresa vinculada. Fale com o administrador.
             </p>
-            <Button
-              onClick={async () => {
-                if (user) {
-                  const emp = await pb.collection('empresas').create({
-                    nome: 'Minha Empresa Vacation',
-                    criador: user.id,
-                  })
-                  await pb.collection('empresa_membros').create({
-                    empresa: emp.id,
-                    user: user.id,
-                    role: 'admin_master',
-                  })
-                  await recarregarEmpresas()
-                  await selecionarEmpresa(emp.id)
-                  toast.success('Empresa inicial criada!')
-                }
-              }}
-            >
-              Criar Empresa Inicial
-            </Button>
           </CardContent>
         </Card>
       ) : estudos.length === 0 ? (

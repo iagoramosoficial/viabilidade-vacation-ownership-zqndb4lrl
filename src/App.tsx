@@ -8,6 +8,7 @@ import { Login } from './pages/Login'
 import { EstudoCenario } from './pages/EstudoCenario'
 import { PaginaTestes } from './pages/PaginaTestes'
 import NotFound from './pages/NotFound'
+import { AdminPage } from './pages/Admin'
 import Layout from './components/Layout'
 
 const App = () => (
@@ -20,6 +21,7 @@ const App = () => (
           <Route element={<Layout />}>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/admin" element={<AdminPage />} />
             <Route path="/testes" element={<PaginaTestes />} />
             <Route path="/estudo/:estudoId/cenario/:cenarioId" element={<EstudoCenario />} />
           </Route>

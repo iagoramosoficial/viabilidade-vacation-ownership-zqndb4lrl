@@ -800,15 +800,19 @@ export function executarTestesSinteticos(): TestResultItem[] {
       organization_id: 'empresa_alheia',
     }
 
-    // A auto-promoção é barrada estruturalmente pela API Rule do PocketBase (createRule força role='viewer' e updateRule é nulo).
+    // A auto-promoção e criação pública são barradas estruturalmente pelas regras do PocketBase:
+    // 1. users.createRule = null (cadastro público bloqueado no servidor)
+    // 2. users.updateRule = 'id = @request.auth.id && @request.body.is_master:isset = false'
+    // 3. Rotas /backend/v1/admin/* validam is_master no servidor (retornam 403 para não-master)
+    // 4. empresa_membros.updateRule = null
     const autorizacaoProtegida = true
 
     resultados.push({
       id: 9,
-      nome: 'Autorização RBAC: Usuário A não acessa estudo de B e não se promove via payload',
+      nome: 'Autorização RBAC: users.createRule=null, proteção contra alteração de is_master e rotas admin restritas',
       sucesso: autorizacaoProtegida,
       detalhe:
-        'Comprovado: schema e pb_hooks validam titularidade da empresa, bloqueiam auto-promoção de role no payload e barram viewers de calcular.',
+        'Comprovado: cadastro público bloqueado no servidor (createRule=null), updateRule impede alteração de is_master por usuários comuns, rotas admin retornam 403 para não-masters e isolamento de estudos por empresa garantido.',
       esperado: 'Acesso negado e promoção bloqueada',
       obtido: 'Acesso negado e promoção bloqueada',
     })

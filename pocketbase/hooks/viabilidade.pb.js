@@ -810,3 +810,249 @@ routerAdd('POST', '/backend/v1/viabilidade/duplicar-cenario', (e) => {
     message: 'Cenário duplicado com sucesso',
   })
 })
+
+// ==========================================
+// ROTAS ADMIN PROTEGIDAS POR is_master = true
+// ==========================================
+
+// 1. POST /backend/v1/admin/empresas
+// Cria empresa e vincula opcionalmente um usuário como admin_master (ou o próprio criador)
+routerAdd('POST', '/backend/v1/admin/empresas', (e) => {
+  const info = e.requestInfo()
+  if (!info.auth) {
+    return e.json(401, { error: 'Não autenticado' })
+  }
+  const callerId = info.auth.id
+  let callerRecord
+  try {
+    callerRecord = $app.findRecordById('users', callerId)
+  } catch (_) {
+    return e.json(401, { error: 'Usuário não encontrado' })
+  }
+  if (!callerRecord.getBool('is_master')) {
+    return e.json(403, { error: 'Acesso restrito a administradores master' })
+  }
+
+  const body = e.bindBody({})
+  const nome = (body.nome || '').trim()
+  const cnpj = (body.cnpj || '').trim()
+  const usuarioVinculoId = (body.usuario_id || '').trim() || callerId
+  const roleVinculo = (body.role || 'admin_master').trim()
+
+  if (!nome) {
+    return e.json(400, { error: 'Nome da empresa é obrigatório' })
+  }
+
+  // Validar se o usuário do vínculo existe
+  let usuarioDestino
+  try {
+    usuarioDestino = $app.findRecordById('users', usuarioVinculoId)
+  } catch (_) {
+    return e.json(404, { error: 'Usuário a vincular não foi encontrado' })
+  }
+
+  const papeisValidos = ['admin_master', 'analista', 'viewer']
+  if (!papeisValidos.includes(roleVinculo)) {
+    return e.json(400, { error: 'Papel inválido. Permitidos: admin_master, analista, viewer' })
+  }
+
+  try {
+    const empresasCol = $app.findCollectionByNameOrId('empresas')
+    const novaEmpresa = new Record(empresasCol)
+    novaEmpresa.set('nome', nome)
+    if (cnpj) novaEmpresa.set('cnpj', cnpj)
+    novaEmpresa.set('criador', callerId)
+    $app.save(novaEmpresa)
+
+    // Criar vínculo em empresa_membros
+    const membrosCol = $app.findCollectionByNameOrId('empresa_membros')
+    const novoMembro = new Record(membrosCol)
+    novoMembro.set('empresa', novaEmpresa.id)
+    novoMembro.set('user', usuarioDestino.id)
+    novoMembro.set('role', roleVinculo)
+    $app.save(novoMembro)
+
+    return e.json(201, {
+      message: 'Empresa criada com sucesso',
+      empresa: {
+        id: novaEmpresa.id,
+        nome: novaEmpresa.getString('nome'),
+        cnpj: novaEmpresa.getString('cnpj'),
+        criador: novaEmpresa.getString('criador'),
+      },
+      vinculo: {
+        id: novoMembro.id,
+        empresa_id: novaEmpresa.id,
+        user_id: usuarioDestino.id,
+        role: roleVinculo,
+      },
+    })
+  } catch (err) {
+    return e.json(400, { error: 'Erro ao criar empresa: ' + (err.message || String(err)) })
+  }
+})
+
+// 2. POST /backend/v1/admin/usuarios
+// Cria usuário com senha provisória e vincula à empresa especificada com papel (admin_master, analista, viewer)
+routerAdd('POST', '/backend/v1/admin/usuarios', (e) => {
+  const info = e.requestInfo()
+  if (!info.auth) {
+    return e.json(401, { error: 'Não autenticado' })
+  }
+  const callerId = info.auth.id
+  let callerRecord
+  try {
+    callerRecord = $app.findRecordById('users', callerId)
+  } catch (_) {
+    return e.json(401, { error: 'Usuário não encontrado' })
+  }
+  if (!callerRecord.getBool('is_master')) {
+    return e.json(403, { error: 'Acesso restrito a administradores master' })
+  }
+
+  const body = e.bindBody({})
+  const email = (body.email || '').trim().toLowerCase()
+  const password = (body.password || '').trim()
+  const name = (body.name || '').trim()
+  const empresaId = (body.empresa_id || '').trim()
+  const role = (body.role || 'analista').trim()
+  const isMaster = Boolean(body.is_master)
+
+  if (!email || !password) {
+    return e.json(400, { error: 'E-mail e senha são obrigatórios' })
+  }
+  if (password.length < 8) {
+    return e.json(400, { error: 'A senha provisória deve ter no mínimo 8 caracteres' })
+  }
+
+  const papeisValidos = ['admin_master', 'analista', 'viewer']
+  if (empresaId && !papeisValidos.includes(role)) {
+    return e.json(400, { error: 'Papel inválido. Permitidos: admin_master, analista, viewer' })
+  }
+
+  // Se passou empresaId, validar existência
+  let empresaRec = null
+  if (empresaId) {
+    try {
+      empresaRec = $app.findRecordById('empresas', empresaId)
+    } catch (_) {
+      return e.json(404, { error: 'Empresa especificada não encontrada' })
+    }
+  }
+
+  // Verificar se o e-mail já existe
+  try {
+    const existing = $app.findAuthRecordByEmail('_pb_users_auth_', email)
+    if (existing) {
+      return e.json(400, { error: 'Já existe um usuário cadastrado com este e-mail' })
+    }
+  } catch (_) {
+    // Ok se não encontrar
+  }
+
+  try {
+    const usersCol = $app.findCollectionByNameOrId('_pb_users_auth_')
+    const novoUsuario = new Record(usersCol)
+    novoUsuario.setEmail(email)
+    novoUsuario.setPassword(password)
+    novoUsuario.setVerified(true)
+    if (name) novoUsuario.set('name', name)
+    if (isMaster) novoUsuario.set('is_master', true)
+    $app.save(novoUsuario)
+
+    let vinculoInfo = null
+    if (empresaRec) {
+      const membrosCol = $app.findCollectionByNameOrId('empresa_membros')
+      const novoMembro = new Record(membrosCol)
+      novoMembro.set('empresa', empresaRec.id)
+      novoMembro.set('user', novoUsuario.id)
+      novoMembro.set('role', role)
+      $app.save(novoMembro)
+
+      vinculoInfo = {
+        id: novoMembro.id,
+        empresa_id: empresaRec.id,
+        empresa_nome: empresaRec.getString('nome'),
+        role: role,
+      }
+    }
+
+    return e.json(201, {
+      message: 'Usuário criado com sucesso',
+      usuario: {
+        id: novoUsuario.id,
+        email: novoUsuario.getString('email'),
+        name: novoUsuario.getString('name'),
+        is_master: novoUsuario.getBool('is_master'),
+      },
+      vinculo: vinculoInfo,
+    })
+  } catch (err) {
+    return e.json(400, { error: 'Erro ao criar usuário: ' + (err.message || String(err)) })
+  }
+})
+
+// 3. GET /backend/v1/admin/usuarios
+// Lista usuários e respectivos vínculos com empresas
+routerAdd('GET', '/backend/v1/admin/usuarios', (e) => {
+  const info = e.requestInfo()
+  if (!info.auth) {
+    return e.json(401, { error: 'Não autenticado' })
+  }
+  const callerId = info.auth.id
+  let callerRecord
+  try {
+    callerRecord = $app.findRecordById('users', callerId)
+  } catch (_) {
+    return e.json(401, { error: 'Usuário não encontrado' })
+  }
+  if (!callerRecord.getBool('is_master')) {
+    return e.json(403, { error: 'Acesso restrito a administradores master' })
+  }
+
+  try {
+    const todosUsuarios = $app.findRecordsByFilter('users', '1=1', '-created', 200, 0)
+    const todosMembros = $app.findRecordsByFilter('empresa_membros', '1=1', '-created', 500, 0)
+    const todasEmpresas = $app.findRecordsByFilter('empresas', '1=1', 'nome', 200, 0)
+
+    const empresasMap = {}
+    todasEmpresas.forEach((emp) => {
+      empresasMap[emp.id] = {
+        id: emp.id,
+        nome: emp.getString('nome'),
+        cnpj: emp.getString('cnpj'),
+        criador: emp.getString('criador'),
+      }
+    })
+
+    const membrosPorUsuario = {}
+    todosMembros.forEach((m) => {
+      const uId = m.getString('user')
+      if (!membrosPorUsuario[uId]) membrosPorUsuario[uId] = []
+      const empId = m.getString('empresa')
+      membrosPorUsuario[uId].push({
+        id: m.id,
+        empresa_id: empId,
+        empresa_nome: empresasMap[empId] ? empresasMap[empId].nome : 'Empresa Removida',
+        role: m.getString('role'),
+        created: m.getString('created'),
+      })
+    })
+
+    const lista = todosUsuarios.map((u) => ({
+      id: u.id,
+      email: u.getString('email'),
+      name: u.getString('name'),
+      is_master: u.getBool('is_master'),
+      created: u.getString('created'),
+      vinculos: membrosPorUsuario[u.id] || [],
+    }))
+
+    return e.json(200, {
+      usuarios: lista,
+      empresas: Object.values(empresasMap),
+    })
+  } catch (err) {
+    return e.json(500, { error: 'Erro ao listar usuários: ' + (err.message || String(err)) })
+  }
+})
