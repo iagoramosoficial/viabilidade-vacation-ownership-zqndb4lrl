@@ -35,7 +35,19 @@ import {
   Mail,
   KeyRound,
   Check,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 
 interface UsuarioAdminItem {
@@ -90,6 +102,18 @@ export const AdminPage: React.FC = () => {
     'admin_master' | 'analista' | 'viewer'
   >('admin_master')
   const [salvandoEmpresa, setSalvandoEmpresa] = useState(false)
+
+  // Estado de Exclusão de Usuário
+  const [usuarioParaExcluir, setUsuarioParaExcluir] = useState<UsuarioAdminItem | null>(null)
+  const [modalConfirmarExclusao, setModalConfirmarExclusao] = useState(false)
+  const [modalTransferirEExcluir, setModalTransferirEExcluir] = useState(false)
+  const [excluindoUsuario, setExcluindoUsuario] = useState(false)
+  const [historicoConflito, setHistoricoConflito] = useState<{
+    mensagem: string
+    estudos: number
+    simulacoes: number
+    empresas: number
+  } | null>(null)
 
   const carregarDados = async () => {
     try {
@@ -218,6 +242,56 @@ export const AdminPage: React.FC = () => {
       toast.error('Erro ao criar empresa: ' + (err instanceof Error ? err.message : String(err)))
     } finally {
       setSalvandoEmpresa(false)
+    }
+  }
+
+  const iniciarExclusao = (target: UsuarioAdminItem) => {
+    setUsuarioParaExcluir(target)
+    setHistoricoConflito(null)
+    setModalConfirmarExclusao(true)
+  }
+
+  const handleExcluirUsuario = async (transferir: boolean = false) => {
+    if (!usuarioParaExcluir) return
+
+    try {
+      setExcluindoUsuario(true)
+      const url = `/backend/v1/admin/usuarios/${usuarioParaExcluir.id}${transferir ? '?transferir=true' : ''}`
+      const res = await pb.send(url, {
+        method: 'DELETE',
+      })
+
+      toast.success(res.mensagem || 'Usuário excluído com sucesso!')
+      setModalConfirmarExclusao(false)
+      setModalTransferirEExcluir(false)
+      setUsuarioParaExcluir(null)
+      setHistoricoConflito(null)
+      await carregarDados()
+    } catch (err: unknown) {
+      // Verificar se retornou status 409 (conflito de histórico)
+      const errorObj = err as {
+        status?: number
+        response?: {
+          error?: string
+          contagens?: { estudos: number; simulacoes: number; empresas: number }
+        }
+      }
+      if (errorObj?.status === 409 && errorObj?.response) {
+        setHistoricoConflito({
+          mensagem: errorObj.response.error || 'Este usuário possui registros associados.',
+          estudos: errorObj.response.contagens?.estudos || 0,
+          simulacoes: errorObj.response.contagens?.simulacoes || 0,
+          empresas: errorObj.response.contagens?.empresas || 0,
+        })
+        setModalConfirmarExclusao(false)
+        setModalTransferirEExcluir(true)
+        return
+      }
+
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error('Erro ao excluir usuário: ' + msg)
+    } finally {
+      setExcluindoUsuario(false)
     }
   }
 
@@ -533,26 +607,41 @@ export const AdminPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Vínculos */}
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {u.vinculos.length === 0 ? (
-                          <span className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900">
-                            Sem empresa vinculada
-                          </span>
-                        ) : (
-                          u.vinculos.map((v) => (
-                            <Badge
-                              key={v.id}
-                              variant="outline"
-                              className="text-xs py-0.5 gap-1.5 font-normal"
-                            >
-                              <Building2 className="h-3 w-3 text-muted-foreground" />
-                              <span className="font-medium">{v.empresa_nome}</span>
-                              <span className="text-muted-foreground">
-                                ({roleLabels[v.role] || v.role})
-                              </span>
-                            </Badge>
-                          ))
+                      {/* Vínculos e Ações */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {u.vinculos.length === 0 ? (
+                            <span className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900">
+                              Sem empresa vinculada
+                            </span>
+                          ) : (
+                            u.vinculos.map((v) => (
+                              <Badge
+                                key={v.id}
+                                variant="outline"
+                                className="text-xs py-0.5 gap-1.5 font-normal"
+                              >
+                                <Building2 className="h-3 w-3 text-muted-foreground" />
+                                <span className="font-medium">{v.empresa_nome}</span>
+                                <span className="text-muted-foreground">
+                                  ({roleLabels[v.role] || v.role})
+                                </span>
+                              </Badge>
+                            ))
+                          )}
+                        </div>
+
+                        {/* Botão de Excluir: não aparece para o próprio master logado nem para outros masters */}
+                        {u.id !== user.id && !u.is_master && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive h-8 px-2.5 gap-1 text-xs"
+                            onClick={() => iniciarExclusao(u)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Excluir
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -601,6 +690,102 @@ export const AdminPage: React.FC = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Diálogo de Confirmação 1: Exclusão Simples */}
+      <AlertDialog open={modalConfirmarExclusao} onOpenChange={setModalConfirmarExclusao}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Excluir Usuário
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-sm">
+              <span>
+                Tem certeza de que deseja excluir o usuário{' '}
+                <strong className="text-foreground">{usuarioParaExcluir?.email}</strong>
+                {usuarioParaExcluir?.name ? ` (${usuarioParaExcluir.name})` : ''}?
+              </span>
+              <span className="block text-muted-foreground text-xs">
+                Esta ação removerá o acesso do usuário e seus vínculos com empresas.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindoUsuario}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={excluindoUsuario}
+              onClick={(e) => {
+                e.preventDefault()
+                handleExcluirUsuario(false)
+              }}
+            >
+              {excluindoUsuario ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo de Confirmação 2: Conflito de Histórico (409) -> Transferir e Excluir */}
+      <AlertDialog open={modalTransferirEExcluir} onOpenChange={setModalTransferirEExcluir}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-500">
+              <AlertTriangle className="h-5 w-5" />
+              Histórico de Registros Associados
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 text-sm">
+              <span className="block text-foreground font-medium">
+                {historicoConflito?.mensagem ||
+                  'Este usuário possui estudos, simulações ou empresas vinculados que não podem ficar órfãos.'}
+              </span>
+              <div className="rounded-lg bg-muted/60 p-3 text-xs space-y-1 border">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Estudos criados:</span>
+                  <span className="font-semibold">{historicoConflito?.estudos || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Simulações executadas:</span>
+                  <span className="font-semibold">{historicoConflito?.simulacoes || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Empresas criadas:</span>
+                  <span className="font-semibold">{historicoConflito?.empresas || 0}</span>
+                </div>
+              </div>
+              <span className="block text-xs text-muted-foreground">
+                Para concluir a exclusão de{' '}
+                <strong className="text-foreground">{usuarioParaExcluir?.email}</strong>, deseja
+                transferir a titularidade de todos esses registros para o seu usuário Administrador
+                Master?
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={excluindoUsuario}
+              onClick={() => {
+                setModalTransferirEExcluir(false)
+                setUsuarioParaExcluir(null)
+              }}
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              disabled={excluindoUsuario}
+              onClick={(e) => {
+                e.preventDefault()
+                handleExcluirUsuario(true)
+              }}
+            >
+              {excluindoUsuario
+                ? 'Transferindo e excluindo...'
+                : 'Transferir esses registros para mim e excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

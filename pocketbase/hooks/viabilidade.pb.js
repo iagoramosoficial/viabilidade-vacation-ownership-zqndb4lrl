@@ -158,6 +158,155 @@ routerAdd('GET', '/backend/v1/admin/usuarios', (e) => {
 })
 
 // ---------------------------------------------------------------------------
+// ADMIN: DELETE /backend/v1/admin/usuarios/{id}
+// ---------------------------------------------------------------------------
+routerAdd('DELETE', '/backend/v1/admin/usuarios/{id}', (e) => {
+  const callerAuth = e.auth
+  const callerIsMaster = Boolean(callerAuth && callerAuth.getBool('is_master'))
+  if (!callerIsMaster) {
+    return e.json(403, { error: 'Acesso restrito a Administradores Master.' })
+  }
+
+  const userId = e.request.pathValue('id')
+  if (!userId) {
+    return e.json(400, { error: 'ID de usuário não informado.' })
+  }
+
+  // Não pode excluir a si mesmo
+  if (callerAuth.id === userId) {
+    return e.json(400, { error: 'Não é permitido excluir o seu próprio usuário.' })
+  }
+
+  let targetUser = null
+  try {
+    targetUser = e.app.findRecordById('users', userId)
+  } catch (_) {
+    return e.json(404, { error: 'Usuário não encontrado.' })
+  }
+
+  // Não pode excluir outro master
+  if (targetUser.getBool('is_master')) {
+    return e.json(400, { error: 'Não é permitido excluir outro usuário Administrador Master.' })
+  }
+
+  // Contar vínculos obrigatórios usando parâmetros de filtro seguros
+  let totalEstudos = 0
+  let totalSimulacoes = 0
+  let totalEmpresas = 0
+
+  try {
+    totalEstudos = e.app.countRecords('estudos', 'criador = {:userId}', { userId: userId })
+  } catch (errEst) {
+    console.error('Erro ao contar estudos:', errEst)
+  }
+
+  try {
+    totalSimulacoes = e.app.countRecords('simulacoes', 'executado_por = {:userId}', {
+      userId: userId,
+    })
+  } catch (errSim) {
+    console.error('Erro ao contar simulacoes:', errSim)
+  }
+
+  try {
+    totalEmpresas = e.app.countRecords('empresas', 'criador = {:userId}', { userId: userId })
+  } catch (errEmp) {
+    console.error('Erro ao contar empresas:', errEmp)
+  }
+
+  const totalHistorico = totalEstudos + totalSimulacoes + totalEmpresas
+
+  const reqInfo = e.requestInfo()
+  const transferir = Boolean(
+    reqInfo.query && (reqInfo.query.transferir === 'true' || reqInfo.query.transferir === true),
+  )
+
+  // Se houver histórico e não foi solicitado transferir: responder 409
+  if (totalHistorico > 0 && !transferir) {
+    return e.json(409, {
+      error: `Este usuário tem ${totalEstudos} estudos, ${totalSimulacoes} simulações e ${totalEmpresas} empresas associados.`,
+      contagens: {
+        estudos: totalEstudos,
+        simulacoes: totalSimulacoes,
+        empresas: totalEmpresas,
+        total: totalHistorico,
+      },
+    })
+  }
+
+  // Se houver histórico e transferir=true: reatribuir registros ao master que está excluindo
+  if (totalHistorico > 0 && transferir) {
+    try {
+      e.app.runInTransaction((txApp) => {
+        if (totalEstudos > 0) {
+          txApp
+            .db()
+            .newQuery('UPDATE estudos SET criador = {:masterId} WHERE criador = {:targetId}')
+            .bind({ masterId: callerAuth.id, targetId: userId })
+            .execute()
+        }
+        if (totalSimulacoes > 0) {
+          txApp
+            .db()
+            .newQuery(
+              'UPDATE simulacoes SET executado_por = {:masterId} WHERE executado_por = {:targetId}',
+            )
+            .bind({ masterId: callerAuth.id, targetId: userId })
+            .execute()
+        }
+        if (totalEmpresas > 0) {
+          txApp
+            .db()
+            .newQuery('UPDATE empresas SET criador = {:masterId} WHERE criador = {:targetId}')
+            .bind({ masterId: callerAuth.id, targetId: userId })
+            .execute()
+        }
+
+        // Excluir o usuário dentro da transação
+        const recordToDelete = txApp.findRecordById('users', userId)
+        txApp.delete(recordToDelete)
+      })
+    } catch (txErr) {
+      console.error('Erro ao transferir registros e excluir usuário:', txErr)
+      return e.json(500, {
+        error:
+          'Falha ao reatribuir registros e excluir usuário: ' + (txErr.message || String(txErr)),
+      })
+    }
+
+    return e.json(200, {
+      success: true,
+      mensagem: `Usuário excluído com sucesso. ${totalEstudos} estudos, ${totalSimulacoes} simulações e ${totalEmpresas} empresas foram reatribuídos para ${callerAuth.getString('email')}.`,
+      transferidos: {
+        estudos: totalEstudos,
+        simulacoes: totalSimulacoes,
+        empresas: totalEmpresas,
+      },
+    })
+  }
+
+  // Sem histórico: excluir direto
+  try {
+    e.app.delete(targetUser)
+  } catch (delErr) {
+    console.error('Erro ao excluir usuário:', delErr)
+    return e.json(500, {
+      error: 'Falha ao excluir usuário: ' + (delErr.message || String(delErr)),
+    })
+  }
+
+  return e.json(200, {
+    success: true,
+    mensagem: 'Usuário excluído com sucesso.',
+    transferidos: {
+      estudos: 0,
+      simulacoes: 0,
+      empresas: 0,
+    },
+  })
+})
+
+// ---------------------------------------------------------------------------
 // ADMIN: POST /backend/v1/admin/empresas
 // ---------------------------------------------------------------------------
 routerAdd('POST', '/backend/v1/admin/empresas', (e) => {
