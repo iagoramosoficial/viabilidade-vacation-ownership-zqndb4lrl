@@ -3,7 +3,7 @@
 
 'use strict'
 
-var VB_MOTOR_VERSAO = 'v1.4.0'
+var VB_MOTOR_VERSAO = 'v1.4.1'
 
 // ---------- Formatação e helpers compartilhados ----------
 function vb_resolverValorMes(config, mesIdx) {
@@ -1514,14 +1514,16 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
       })
     }
 
+    // O responsável pelo transporte vem SOMENTE do ponto de captação (validação
+    // vb_validarPremissas já bloqueia ponto com custo de transporte > 0 sem
+    // responsável informado). Sem inferência, sem default.
     var transportePorResponsavel = { comercializadora: 0, empreendimento: 0 }
     funilMensal[fm].salas.forEach(function (s) {
       s.pontos.forEach(function (pt) {
         if (pt.custo_transporte_total > 0) {
-          var respTrans = pt.responsavel_transporte
-          if (respTrans === 'empreendimento') {
+          if (pt.responsavel_transporte === 'empreendimento') {
             transportePorResponsavel.empreendimento += pt.custo_transporte_total
-          } else {
+          } else if (pt.responsavel_transporte === 'comercializadora') {
             transportePorResponsavel.comercializadora += pt.custo_transporte_total
           }
         }

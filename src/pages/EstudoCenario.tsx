@@ -232,7 +232,6 @@ export const EstudoCenario: React.FC = () => {
                 volume_entrada: { base: 80, ajustes: {} },
                 taxa_qualificados: { base: 1.0, ajustes: {} },
                 taxa_convidados: { base: 1.0, ajustes: {} },
-                taxa_comparecimento: { base: 1.0, ajustes: {} },
                 taxa_conversao_venda: { base: 0.2, ajustes: {} },
                 custo_transporte_unitario: { base: 0, ajustes: {} },
               },
