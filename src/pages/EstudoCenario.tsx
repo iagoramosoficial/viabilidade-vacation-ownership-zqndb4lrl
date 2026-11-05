@@ -15,6 +15,8 @@ import type {
   TipoCustoDespesa,
   ResponsavelEconomico,
   CategoriaInvestimento,
+  CondicaoPagamentoModalidade,
+  RegrasCancelamentoInadimplencia,
 } from '@/types/viabilidade'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -109,42 +111,52 @@ export const EstudoCenario: React.FC = () => {
       setIsStale(cen.is_stale || false)
       setIsExemplo(Boolean(cen.is_exemplo))
 
-      let p = cen.premissas as PremissasEstudo
-      if (!p || !p.salas) {
-        // Fallback: premissas vazias (sem números pré-definidos)
-        p = {
-          salas: [],
-          produtos: [],
-          mix_por_sala: [],
-          condicoes_pagamento: {
-            multipropriedade: {
-              perc_entrada: 0,
-              parcelas_entrada: 0,
-              mes_primeira_saldo: 0,
-              parcelas_saldo: 0,
-            },
-            timeshare: {
-              perc_entrada: 0,
-              parcelas_entrada: 0,
-              mes_primeira_saldo: 0,
-              parcelas_saldo: 0,
-            },
-          },
-          cancelamentos_inadimplencia: {
-            multipropriedade: {
-              cancelamento: { taxa: 0, mes_medio: 0, taxa_devolucao: 0, prazo_devolucao: 0 },
-              inadimplencia: { taxa: 0, parcela_recuperavel: 0, prazo_recuperacao: 0 },
-            },
-            timeshare: {
-              cancelamento: { taxa: 0, mes_medio: 0, taxa_devolucao: 0, prazo_devolucao: 0 },
-              inadimplencia: { taxa: 0, parcela_recuperavel: 0, prazo_recuperacao: 0 },
-            },
-          },
-          remuneracoes: [],
-          custos_despesas: [],
-          investimentos: [],
-          caixa_inicial: { comercializadora: 0, empreendimento: 0 },
-        }
+      const rawP = (cen.premissas || {}) as Partial<PremissasEstudo>
+
+      const normalizarCondicao = (
+        cond?: Partial<CondicaoPagamentoModalidade>,
+      ): CondicaoPagamentoModalidade => ({
+        perc_entrada: cond?.perc_entrada ?? 0,
+        parcelas_entrada: cond?.parcelas_entrada ?? 0,
+        mes_primeira_saldo: cond?.mes_primeira_saldo ?? 0,
+        parcelas_saldo: cond?.parcelas_saldo ?? 0,
+      })
+
+      const normalizarCancInad = (
+        ci?: Partial<RegrasCancelamentoInadimplencia>,
+      ): RegrasCancelamentoInadimplencia => ({
+        cancelamento: {
+          taxa: ci?.cancelamento?.taxa ?? 0,
+          mes_medio: ci?.cancelamento?.mes_medio ?? 0,
+          taxa_devolucao: ci?.cancelamento?.taxa_devolucao ?? 0,
+          prazo_devolucao: ci?.cancelamento?.prazo_devolucao ?? 0,
+        },
+        inadimplencia: {
+          taxa: ci?.inadimplencia?.taxa ?? 0,
+          parcela_recuperavel: ci?.inadimplencia?.parcela_recuperavel ?? 0,
+          prazo_recuperacao: ci?.inadimplencia?.prazo_recuperacao ?? 0,
+        },
+      })
+
+      const p: PremissasEstudo = {
+        salas: Array.isArray(rawP.salas) ? rawP.salas : [],
+        produtos: Array.isArray(rawP.produtos) ? rawP.produtos : [],
+        mix_por_sala: Array.isArray(rawP.mix_por_sala) ? rawP.mix_por_sala : [],
+        condicoes_pagamento: {
+          multipropriedade: normalizarCondicao(rawP.condicoes_pagamento?.multipropriedade),
+          timeshare: normalizarCondicao(rawP.condicoes_pagamento?.timeshare),
+        },
+        cancelamentos_inadimplencia: {
+          multipropriedade: normalizarCancInad(rawP.cancelamentos_inadimplencia?.multipropriedade),
+          timeshare: normalizarCancInad(rawP.cancelamentos_inadimplencia?.timeshare),
+        },
+        remuneracoes: Array.isArray(rawP.remuneracoes) ? rawP.remuneracoes : [],
+        custos_despesas: Array.isArray(rawP.custos_despesas) ? rawP.custos_despesas : [],
+        investimentos: Array.isArray(rawP.investimentos) ? rawP.investimentos : [],
+        caixa_inicial: {
+          comercializadora: rawP.caixa_inicial?.comercializadora ?? 0,
+          empreendimento: rawP.caixa_inicial?.empreendimento ?? 0,
+        },
       }
       setPremissas(p)
 
