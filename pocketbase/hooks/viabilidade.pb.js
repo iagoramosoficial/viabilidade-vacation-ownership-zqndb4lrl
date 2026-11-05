@@ -393,26 +393,8 @@ routerAdd('POST', '/backend/v1/viabilidade/simular', (e) => {
   const horizonte = estudo.getInt('horizonte_meses') || 36
   const mesInicial = estudo.getString('mes_inicial') || '2025-01'
 
-  // Carrega motor determinístico fonte única
-  let core = null
-  try {
-    core = require(`${__hooks}/viabilidade_core_pb.pb.js`)
-  } catch (_) {
-    try {
-      core = require(`${__hooks}/viabilidade_core.pb.js`)
-    } catch (_) {
-      let code = ''
-      try {
-        code = readerToString($os.readFile(`${__hooks}/viabilidade_core_pb.pb.js`))
-      } catch (__e) {
-        code = readerToString($os.readFile(`${__hooks}/viabilidade_core.pb.js`))
-      }
-      const fn = new Function('module', 'exports', 'globalThis', code)
-      const dummyModule = { exports: {} }
-      fn(dummyModule, dummyModule.exports, globalThis)
-      core = dummyModule.exports.vb_calcularSimulacao ? dummyModule.exports : globalThis
-    }
-  }
+  // Carrega motor determinístico fonte única (arquivo real: viabilidade_core.pb.js)
+  const core = require(`${__hooks}/viabilidade_core.pb.js`)
 
   // Validação estrita antes do cálculo: se houver pendências bloqueantes, retorna 422
   const errosValidacao = core.vb_validarPremissas(premissas, horizonte)
@@ -485,25 +467,7 @@ routerAdd('GET', '/backend/v1/viabilidade/autoteste', (e) => {
   }
 
   try {
-    let core = null
-    try {
-      core = require(`${__hooks}/viabilidade_core_pb.pb.js`)
-    } catch (_) {
-      try {
-        core = require(`${__hooks}/viabilidade_core.pb.js`)
-      } catch (_) {
-        let code = ''
-        try {
-          code = readerToString($os.readFile(`${__hooks}/viabilidade_core_pb.pb.js`))
-        } catch (__e) {
-          code = readerToString($os.readFile(`${__hooks}/viabilidade_core.pb.js`))
-        }
-        const fn = new Function('module', 'exports', 'globalThis', code)
-        const dummyModule = { exports: {} }
-        fn(dummyModule, dummyModule.exports, globalThis)
-        core = dummyModule.exports.vb_calcularSimulacao ? dummyModule.exports : globalThis
-      }
-    }
+    const core = require(`${__hooks}/viabilidade_core.pb.js`)
 
     const casos = []
 
@@ -935,6 +899,38 @@ routerAdd('GET', '/backend/v1/viabilidade/autoteste', (e) => {
     // CASO 7: Blueprint 7
     try {
       const p = criarBaseMinima()
+      // Estrutura comercial mínima (sala + produto + mix) com volume de entrada 0:
+      // necessária para passar na validação sem alterar os valores esperados do caso.
+      p.salas = [
+        {
+          id: 's7',
+          nome: 'Sala 7',
+          capacidade_mensal: { base: 10 },
+          pontos: [
+            {
+              id: 'p7',
+              sala_id: 's7',
+              nome: 'Ponto 7',
+              etapa_entrada: 'comparecidos',
+              volume_entrada: { base: 0 },
+              taxa_conversao_venda: { base: 0 },
+              custo_transporte_unitario: { base: 0 },
+            },
+          ],
+        },
+      ]
+      p.produtos = [
+        {
+          id: 'prod7',
+          nome: 'Prod 7',
+          modalidade: 'multipropriedade',
+          preco: { base: 100000 },
+          estoque_disponivel: 10,
+        },
+      ]
+      p.mix_por_sala = [
+        { sala_id: 's7', produtos: [{ produto_id: 'prod7', percentual: { base: 1.0 } }] },
+      ]
       p.remuneracoes = [
         {
           id: 'rem1',
@@ -1190,6 +1186,38 @@ routerAdd('GET', '/backend/v1/viabilidade/autoteste', (e) => {
     // CASO 11: Reembolso de despesa R$ 10 mil em 2 meses
     try {
       const p = criarBaseMinima()
+      // Estrutura comercial mínima (sala + produto + mix) com volume de entrada 0:
+      // necessária para passar na validação sem alterar os valores esperados do caso.
+      p.salas = [
+        {
+          id: 's11',
+          nome: 'Sala 11',
+          capacidade_mensal: { base: 10 },
+          pontos: [
+            {
+              id: 'p11',
+              sala_id: 's11',
+              nome: 'Ponto 11',
+              etapa_entrada: 'comparecidos',
+              volume_entrada: { base: 0 },
+              taxa_conversao_venda: { base: 0 },
+              custo_transporte_unitario: { base: 0 },
+            },
+          ],
+        },
+      ]
+      p.produtos = [
+        {
+          id: 'prod11',
+          nome: 'Prod 11',
+          modalidade: 'multipropriedade',
+          preco: { base: 100000 },
+          estoque_disponivel: 10,
+        },
+      ]
+      p.mix_por_sala = [
+        { sala_id: 's11', produtos: [{ produto_id: 'prod11', percentual: { base: 1.0 } }] },
+      ]
       p.custos_despesas = [
         {
           id: 'cd11',
@@ -1322,6 +1350,142 @@ routerAdd('GET', '/backend/v1/viabilidade/autoteste', (e) => {
       )
     } catch (err) {
       addCaso(12, 'Retenção de entrada', {}, 'erro: ' + err.message, false, err.message)
+    }
+
+    // CASO 13: Cenário vazio -> pendências de sala, produto e caixa inicial
+    try {
+      const p = criarBaseMinima()
+      p.salas = []
+      p.produtos = []
+      p.mix_por_sala = []
+      p.caixa_inicial = null
+      const pend = core.vb_validarPremissas(p, 12)
+      const temSala = pend.some(
+        (x) =>
+          ((x && x.caminho) || '').indexOf('salas') >= 0 ||
+          ((x && x.mensagem) || '').indexOf('sala') >= 0,
+      )
+      const temProduto = pend.some(
+        (x) =>
+          ((x && x.caminho) || '').indexOf('produtos') >= 0 ||
+          ((x && x.mensagem) || '').indexOf('produto') >= 0,
+      )
+      const temCaixa = pend.some(
+        (x) =>
+          ((x && x.caminho) || '').indexOf('caixa_inicial') >= 0 ||
+          ((x && x.mensagem) || '').indexOf('caixa') >= 0,
+      )
+      const ok = pend.length > 0 && temSala && temProduto && temCaixa
+      addCaso(
+        13,
+        'Cenário vazio -> pendências apontando sala, produto e caixa inicial (bloqueio antes do cálculo)',
+        { pendencias: '>0', sala: true, produto: true, caixa: true },
+        { total: pend.length, sala: temSala, produto: temProduto, caixa: temCaixa },
+        ok,
+        ok ? 'Cenário vazio bloqueado com pendências por aba.' : 'Divergência',
+      )
+    } catch (err) {
+      addCaso(13, 'Cenário vazio', {}, 'erro: ' + err.message, false, err.message)
+    }
+
+    // CASO 14: Caixa inicial 0 digitado -> aceito sem pendência
+    try {
+      const p = criarBaseMinima()
+      p.salas = [
+        {
+          id: 's14',
+          nome: 'Sala 14',
+          capacidade_mensal: { base: 60 },
+          pontos: [
+            {
+              id: 'p14',
+              sala_id: 's14',
+              nome: 'Ponto 14',
+              etapa_entrada: 'comparecidos',
+              volume_entrada: { base: 100 },
+              taxa_conversao_venda: { base: 0.2 },
+              custo_transporte_unitario: { base: 0 },
+            },
+          ],
+        },
+      ]
+      p.produtos = [
+        {
+          id: 'prod14',
+          nome: 'Prod 14',
+          modalidade: 'multipropriedade',
+          preco: { base: 40000 },
+          estoque_disponivel: 100,
+        },
+      ]
+      p.mix_por_sala = [
+        { sala_id: 's14', produtos: [{ produto_id: 'prod14', percentual: { base: 1.0 } }] },
+      ]
+      p.caixa_inicial = { comercializadora: 0, empreendimento: 0 }
+      const pend = core.vb_validarPremissas(p, 3)
+      const ok = pend.length === 0
+      addCaso(
+        14,
+        'Caixa inicial 0 digitado -> aceito sem pendência (0 é valor válido, não pendência)',
+        { pendencias: 0 },
+        { pendencias: pend.length, detalhes: pend.map((x) => x && x.mensagem) },
+        ok,
+        ok ? 'Cenário completo com caixa 0 digitado validado sem pendências.' : 'Divergência',
+      )
+    } catch (err) {
+      addCaso(14, 'Caixa inicial 0 digitado', {}, 'erro: ' + err.message, false, err.message)
+    }
+
+    // CASO 15: Custo de transporte sem responsável -> pendência bloqueante
+    try {
+      const p = criarBaseMinima()
+      p.salas = [
+        {
+          id: 's15',
+          nome: 'Sala 15',
+          capacidade_mensal: { base: 60 },
+          pontos: [
+            {
+              id: 'p15',
+              sala_id: 's15',
+              nome: 'Ponto 15',
+              etapa_entrada: 'comparecidos',
+              volume_entrada: { base: 100 },
+              taxa_conversao_venda: { base: 0.2 },
+              custo_transporte_unitario: { base: 50 },
+            },
+          ],
+        },
+      ]
+      p.produtos = [
+        {
+          id: 'prod15',
+          nome: 'Prod 15',
+          modalidade: 'multipropriedade',
+          preco: { base: 40000 },
+          estoque_disponivel: 100,
+        },
+      ]
+      p.mix_por_sala = [
+        { sala_id: 's15', produtos: [{ produto_id: 'prod15', percentual: { base: 1.0 } }] },
+      ]
+      const pend = core.vb_validarPremissas(p, 3)
+      const temResp = pend.some(
+        (x) =>
+          ((x && x.caminho) || '').indexOf('responsavel_transporte') >= 0 ||
+          ((x && x.mensagem) || '').indexOf('transporte') >= 0,
+      )
+      const ok = pend.length > 0 && temResp
+      addCaso(
+        15,
+        'Custo de transporte sem responsável -> pendência bloqueante (sem default comercializadora)',
+        { pendencias: '>0', transporte: true },
+        { total: pend.length, transporte: temResp, detalhes: pend.map((x) => x && x.mensagem) },
+        ok,
+        ok ? 'Transporte sem responsável bloqueia o cálculo.' : 'Divergência',
+      )
+    } catch (err) {
+      addCaso(15, 'Transporte sem responsável', {}, 'erro: ' + err.message, false, err.message)
     }
 
     const totalPassou = casos.filter((c) => c.passou).length

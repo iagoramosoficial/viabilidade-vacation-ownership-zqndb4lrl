@@ -1012,7 +1012,7 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
           comparecidos_demanda: comparecidos,
           taxa_conversao_venda: taxaConvVenda,
           custo_transporte_unit: rv(ponto.custo_transporte_unitario, m),
-          responsavel_transporte: ponto.responsavel_transporte || 'comercializadora',
+          responsavel_transporte: ponto.responsavel_transporte,
         }
       })
 
@@ -1518,7 +1518,7 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
     funilMensal[fm].salas.forEach(function (s) {
       s.pontos.forEach(function (pt) {
         if (pt.custo_transporte_total > 0) {
-          var respTrans = pt.responsavel_transporte || 'comercializadora'
+          var respTrans = pt.responsavel_transporte
           if (respTrans === 'empreendimento') {
             transportePorResponsavel.empreendimento += pt.custo_transporte_total
           } else {
