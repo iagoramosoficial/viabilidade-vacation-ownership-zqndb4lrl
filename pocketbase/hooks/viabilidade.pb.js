@@ -59,6 +59,7 @@ routerAdd('POST', '/backend/v1/admin/usuarios', (e) => {
   userRecord.set('passwordConfirm', password)
   userRecord.set('name', name)
   userRecord.set('is_master', isMasterPayload)
+  userRecord.set('must_change_password', true)
   e.app.save(userRecord)
 
   let vinculoCriado = null
@@ -132,6 +133,7 @@ routerAdd('GET', '/backend/v1/admin/usuarios', (e) => {
       email: u.getString('email'),
       name: u.getString('name'),
       is_master: u.getBool('is_master'),
+      must_change_password: u.getBool('must_change_password'),
       created: u.getString('created'),
       vinculos: uMembros.map((vm) => ({
         id: vm.id,

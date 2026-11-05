@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T15:55:15.895Z",
+  "generatedAt": "2026-11-05T20:38:15.694Z",
   "collections": [
     {
       "name": "users",
@@ -8,7 +8,7 @@
         "list": "id = @request.auth.id",
         "view": "id = @request.auth.id",
         "create": null,
-        "update": "id = @request.auth.id && @request.body.is_master:isset = false",
+        "update": "id = @request.auth.id && @request.body.is_master:isset = false && (@request.body.must_change_password:isset = false || (@request.body.must_change_password = false && @request.body.password:isset = true))",
         "delete": "id = @request.auth.id"
       },
       "fields": [
@@ -40,6 +40,12 @@
         },
         {
           "name": "is_master",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "must_change_password",
           "type": "bool",
           "required": false,
           "system": false

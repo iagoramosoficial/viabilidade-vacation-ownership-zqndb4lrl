@@ -9,7 +9,6 @@ interface AuthContextType {
   empresa: RecordModel | null
   membroRole: string
   login: (email: string, pass: string) => Promise<void>
-  signup: (email: string, pass: string, name: string) => Promise<void>
   logout: () => void
   selecionarEmpresa: (empresaId: string) => Promise<void>
   empresasDisponiveis: RecordModel[]
@@ -22,7 +21,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<RecordModel | null>(pb.authStore.record)
   const [isLoading, setIsLoading] = useState(true)
   const [empresa, setEmpresa] = useState<RecordModel | null>(null)
-  const [membroRole, setMembroRole] = useState<string>('admin_master')
+  const [membroRole, setMembroRole] = useState<string>('')
   const [empresasDisponiveis, setEmpresasDisponiveis] = useState<RecordModel[]>([])
 
   const carregarEmpresasDoUsuario = async (userId: string) => {
@@ -62,6 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         setEmpresa(null)
+        setMembroRole('')
       }
     } catch (err) {
       console.error('Erro ao carregar empresas:', err)
@@ -75,6 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         carregarEmpresasDoUsuario(model.id)
       } else {
         setEmpresa(null)
+        setMembroRole('')
         setEmpresasDisponiveis([])
       }
     })
@@ -99,20 +100,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await carregarEmpresasDoUsuario(authData.record.id)
   }
 
-  const signup = async (email: string, pass: string, name: string) => {
-    await pb.collection('users').create({
-      email,
-      password: pass,
-      passwordConfirm: pass,
-      name,
-    })
-    await login(email, pass)
-  }
-
   const logout = () => {
     pb.authStore.clear()
     setUser(null)
     setEmpresa(null)
+    setMembroRole('')
     setEmpresasDisponiveis([])
   }
 
@@ -152,7 +144,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         empresa,
         membroRole,
         login,
-        signup,
         logout,
         selecionarEmpresa,
         empresasDisponiveis,

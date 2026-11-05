@@ -50,6 +50,11 @@ export default function Layout() {
   // Sem sessão, qualquer rota cai no login (tela sozinha, fora do Layout).
   if (!user) return <Navigate to="/login" replace />
 
+  // Se o usuário precisa trocar a senha obrigatoriamente, força ida para /perfil
+  if (user.must_change_password && location.pathname !== '/perfil') {
+    return <Navigate to="/perfil" replace />
+  }
+
   const tituloPagina = (() => {
     if (location.pathname.startsWith('/admin')) return 'Admin'
     if (location.pathname.startsWith('/testes')) return 'Autoteste do Motor'
@@ -66,7 +71,7 @@ export default function Layout() {
 
   const papelLabel = user.is_master
     ? 'Administrador Master'
-    : rotulosPapel[membroRole] || membroRole
+    : rotulosPapel[membroRole] || membroRole || null
 
   const iniciais = (user.name || user.email || '??').slice(0, 2).toUpperCase()
 
@@ -135,7 +140,9 @@ export default function Layout() {
               <div className="truncate text-sm font-medium text-foreground">
                 {user.name || user.email}
               </div>
-              <div className="truncate text-[11px] text-muted-foreground">{papelLabel}</div>
+              {papelLabel && (
+                <div className="truncate text-[11px] text-muted-foreground">{papelLabel}</div>
+              )}
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
