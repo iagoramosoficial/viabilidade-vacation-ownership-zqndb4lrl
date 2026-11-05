@@ -43,6 +43,7 @@ import { CampoNumero, CampoPercentual } from '@/components/CamposNumero'
 import { EditorAjustesMensais } from '@/components/EditorAjustesMensais'
 import { TelaResultados } from '@/components/TelaResultados'
 import { vb_validarPremissas } from '@/lib/pocketbase/viabilidade_core.mjs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Calculator,
   Save,
@@ -64,9 +65,15 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+interface ItemPendencia {
+  mensagem: string
+  caminho?: string
+  aba?: string
+}
+
 export const EstudoCenario: React.FC = () => {
   const { estudoId, cenarioId } = useParams<{ estudoId: string; cenarioId: string }>()
-  const { user } = useAuth()
+  const { user, isMaster } = useAuth()
   const navigate = useNavigate()
 
   const [estudo, setEstudo] = useState<RecordModel | null>(null)
@@ -88,9 +95,26 @@ export const EstudoCenario: React.FC = () => {
   const mesIni = estudo?.mes_inicial || '2025-01'
 
   // Validação determinística incondicional de premissas (vb_validarPremissas)
-  const pendenciasValidacao = useMemo(() => {
-    if (!premissas) return ['Premissas não carregadas']
-    return vb_validarPremissas(premissas, horizonte)
+  const pendenciasValidacao = useMemo<ItemPendencia[]>(() => {
+    if (!premissas) {
+      return [{ mensagem: 'Premissas não carregadas', caminho: '', aba: 'funil' }]
+    }
+    const res = vb_validarPremissas(premissas, horizonte)
+    if (!Array.isArray(res)) return []
+    return res.map((item: unknown) => {
+      if (typeof item === 'string') {
+        return { mensagem: item, caminho: '', aba: 'funil' }
+      }
+      if (item && typeof item === 'object') {
+        const obj = item as Record<string, unknown>
+        return {
+          mensagem: String(obj.mensagem || 'Pendência não especificada'),
+          caminho: typeof obj.caminho === 'string' ? obj.caminho : '',
+          aba: typeof obj.aba === 'string' ? obj.aba : 'funil',
+        }
+      }
+      return { mensagem: String(item), caminho: '', aba: 'funil' }
+    })
   }, [premissas, horizonte])
 
   const temPendencias = pendenciasValidacao.length > 0
@@ -702,12 +726,61 @@ export const EstudoCenario: React.FC = () => {
                 O botão <strong>Calcular</strong> permanece desabilitado enquanto houver pendências
                 no preenchimento das premissas:
               </p>
-              <ul className="list-disc list-inside max-h-40 overflow-y-auto pl-1 space-y-0.5 text-[11px] font-mono bg-background/50 p-2 rounded border border-rose-200/50 dark:border-rose-900/50">
-                {pendenciasValidacao.map((item, idx) => (
-                  <li key={idx} className="truncate" title={item}>
-                    {item}
-                  </li>
-                ))}
+              <ul className="max-h-48 overflow-y-auto pl-1 space-y-1 text-[11px] bg-background/50 p-2 rounded border border-rose-200/50 dark:border-rose-900/50">
+                {pendenciasValidacao.map((item, idx) => {
+                  const conteudo = (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (item.aba) {
+                          setAbaAtiva(item.aba)
+                        }
+                      }}
+                      className="group flex items-start gap-1.5 text-left w-full hover:bg-rose-100/60 dark:hover:bg-rose-900/30 p-1 rounded transition-colors"
+                      title={item.aba ? `Ir para a aba ${item.aba}` : undefined}
+                    >
+                      <span className="text-rose-500 font-bold shrink-0 mt-0.5">•</span>
+                      <span className="flex-1 font-sans text-rose-900 dark:text-rose-100 group-hover:underline cursor-pointer">
+                        {item.mensagem}
+                      </span>
+                      {item.caminho && isMaster && (
+                        <span className="font-mono text-[10px] text-muted-foreground shrink-0 bg-muted/60 px-1 py-0.5 rounded">
+                          {item.caminho}
+                        </span>
+                      )}
+                    </button>
+                  )
+
+                  if (isMaster && item.caminho) {
+                    return (
+                      <li key={idx} className="list-none">
+                        <Tooltip>
+                          <TooltipTrigger asChild>{conteudo}</TooltipTrigger>
+                          <TooltipContent
+                            side="top"
+                            className="text-xs font-mono max-w-md break-all"
+                          >
+                            <p className="font-semibold text-[11px] mb-0.5">
+                              Caminho técnico (master):
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">{item.caminho}</p>
+                            {item.aba && (
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                Aba: {item.aba}
+                              </p>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </li>
+                    )
+                  }
+
+                  return (
+                    <li key={idx} className="list-none">
+                      {conteudo}
+                    </li>
+                  )
+                })}
               </ul>
             </AlertDescription>
           </div>
