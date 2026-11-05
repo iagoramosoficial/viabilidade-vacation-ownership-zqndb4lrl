@@ -57,45 +57,65 @@ function vb_gerarHashPremissas(premissas) {
 
 // ---------- Validação de premissas (bloqueante, antes do cálculo) ----------
 function vb_validarPremissas(premissas, horizonte) {
+  // Cada pendência é um objeto:
+  // { mensagem: texto claro em português indicando a aba onde se resolve,
+  //   caminho: caminho técnico do campo (exibido em tooltip somente para master),
+  //   aba: aba do formulário onde a pendência se resolve }
   var erros = []
   var h = Math.max(1, Number(horizonte) || 12)
+  function pend(aba, mensagem, caminho) {
+    erros.push({ mensagem: mensagem, caminho: caminho || '', aba: aba })
+  }
   function isNum(v) {
     return typeof v === 'number' && isFinite(v)
   }
-  function pegaBase(v, onde) {
+  // null / undefined / string vazia = campo NÃO informado (pendência). 0 digitado é valor válido.
+  function vazio(v) {
+    return v === undefined || v === null || v === ''
+  }
+  function pegaBase(v, onde, aba, mensagem) {
+    if (vazio(v)) {
+      pend(aba, mensagem, onde)
+      return
+    }
     if (typeof v === 'number') {
-      if (!isFinite(v)) erros.push(onde + ': valor numérico deve ser finito')
+      if (!isFinite(v)) pend(aba, mensagem, onde)
       return
     }
     if (!v || typeof v !== 'object') {
-      erros.push(onde + ': valor mensal ausente ou inválido')
+      pend(aba, mensagem, onde)
       return
     }
-    if (!isNum(v.base)) erros.push(onde + ': base deve ser número finito')
+    if (vazio(v.base) || !isNum(v.base)) pend(aba, mensagem, onde + '.base')
   }
-  function pegaPerc(v, onde) {
-    pegaBase(v, onde)
+  function pegaPerc(v, onde, aba, mensagem) {
+    pegaBase(v, onde, aba, mensagem)
     var bruto = typeof v === 'number' ? v : v && v.base
     if (isNum(bruto) && (bruto < 0 || bruto > 1))
-      erros.push(onde + ': percentual deve estar entre 0% e 100%')
+      pend(aba, mensagem + ' — informe um valor entre 0% e 100%', onde)
   }
-  function pegaAjustes(v, onde) {
+  function pegaAjustes(v, onde, aba) {
     if (v && typeof v === 'object' && v.ajustes) {
-      if (typeof v.ajustes !== 'object') erros.push(onde + ': ajustes deve ser objeto mês→valor')
+      if (typeof v.ajustes !== 'object')
+        pend(aba, onde + ': ajustes mensais inválidos', onde + '.ajustes')
       else {
         for (var k in v.ajustes) {
           if (!isNum(Number(v.ajustes[k])))
-            erros.push(onde + ': ajuste no mês ' + k + ' deve ser número finito')
+            pend(aba, onde + ': ajuste do mês ' + k + ' deve ser um número', onde + '.ajustes.' + k)
           var km = Number(k)
           if (!isFinite(km) || km < 0 || km >= h)
-            erros.push(onde + ': ajuste no mês ' + k + ' fora do horizonte (0..' + (h - 1) + ')')
+            pend(
+              aba,
+              onde + ': ajuste do mês ' + k + ' está fora do horizonte do estudo',
+              onde + '.ajustes.' + k,
+            )
         }
       }
     }
   }
-  function pegaVM(v, onde) {
-    pegaBase(v, onde)
-    pegaAjustes(v, onde)
+  function pegaVM(v, onde, aba, mensagem) {
+    pegaBase(v, onde, aba, mensagem)
+    pegaAjustes(v, onde, aba)
   }
   function rv(v) {
     if (v === undefined || v === null) return 0
@@ -105,7 +125,8 @@ function vb_validarPremissas(premissas, horizonte) {
   }
 
   if (!premissas || typeof premissas !== 'object') {
-    return ['Premissas ausentes ou inválidas']
+    pend('funil', 'Premissas ausentes ou inválidas — recarregue o cenário', '')
+    return erros
   }
 
   var salas = premissas.salas || []
@@ -122,251 +143,638 @@ function vb_validarPremissas(premissas, horizonte) {
   var idsProdutos = {}
   var idsSalasComMix = {}
   var idsSalasComPonto = {}
+  var nomesSalas = {}
+  var numSalasComPonto = 0
+  var numSalasComMix = 0
   var modalidadesPresentes = {}
 
-  if (!Array.isArray(salas)) erros.push('salas deve ser lista')
+  if (!Array.isArray(salas))
+    pend('funil', 'Cadastre ao menos 1 sala de vendas com ponto de captação', 'premissas.salas')
   else {
+    if (salas.length === 0)
+      pend(
+        'funil',
+        'Cadastre ao menos 1 sala de vendas com ponto de captação (aba Salas e Funil)',
+        'premissas.salas',
+      )
     salas.forEach(function (sala, i) {
       var onde = 'salas[' + i + ']'
-      if (!sala || typeof sala !== 'object') return erros.push(onde + ': sala inválida')
-      if (!sala.id) erros.push(onde + ': id ausente')
-      else if (idsSalas[sala.id]) erros.push(onde + ': id de sala duplicado "' + sala.id + '"')
+      var nomeSala = sala && sala.nome ? '"' + sala.nome + '"' : 'sem nome'
+      if (!sala || typeof sala !== 'object')
+        return pend('funil', 'Salas e Funil › há uma sala inválida na lista', onde)
+      if (!sala.id)
+        pend(
+          'funil',
+          'Salas e Funil › sala ' +
+            nomeSala +
+            ' está sem identificação — salve o cenário e recarregue',
+          onde + '.id',
+        )
+      else if (idsSalas[sala.id])
+        pend('funil', 'Salas e Funil › sala ' + nomeSala + ' está duplicada', onde + '.id')
       else idsSalas[sala.id] = true
-      pegaVM(sala.capacidade_mensal, onde + '.capacidade_mensal')
+      nomesSalas[sala.id] = sala.nome || sala.id
+      pegaVM(
+        sala.capacidade_mensal,
+        onde + '.capacidade_mensal',
+        'funil',
+        'Salas e Funil › sala ' + nomeSala + ': informe a capacidade mensal de atendimentos',
+      )
       if (rv(sala.capacidade_mensal) < 0)
-        erros.push(onde + '.capacidade_mensal: não pode ser negativo')
-      if (!Array.isArray(sala.pontos)) erros.push(onde + '.pontos deve ser lista')
+        pend(
+          'funil',
+          'Salas e Funil › sala ' + nomeSala + ': a capacidade mensal não pode ser negativa',
+          onde + '.capacidade_mensal',
+        )
+      if (!Array.isArray(sala.pontos))
+        pend(
+          'funil',
+          'Salas e Funil › sala ' + nomeSala + ': cadastre ao menos 1 ponto de captação',
+          onde + '.pontos',
+        )
       else {
         var idsPontos = {}
         var temPontoAtivo = false
         sala.pontos.forEach(function (ponto, j) {
           var ondeP = onde + '.pontos[' + j + ']'
-          if (!ponto || typeof ponto !== 'object') return erros.push(ondeP + ': ponto inválido')
-          if (!ponto.id) erros.push(ondeP + ': id ausente')
-          else if (idsPontos[ponto.id]) erros.push(ondeP + ': id de ponto duplicado')
+          var nomePonto = ponto && ponto.nome ? '"' + ponto.nome + '"' : 'sem nome'
+          if (!ponto || typeof ponto !== 'object')
+            return pend(
+              'funil',
+              'Salas e Funil › há um ponto de captação inválido na sala ' + nomeSala,
+              ondeP,
+            )
+          if (!ponto.id)
+            pend(
+              'funil',
+              'Salas e Funil › ponto ' +
+                nomePonto +
+                ' está sem identificação — salve o cenário e recarregue',
+              ondeP + '.id',
+            )
+          else if (idsPontos[ponto.id])
+            pend(
+              'funil',
+              'Salas e Funil › ponto ' + nomePonto + ' está duplicado na sala ' + nomeSala,
+              ondeP + '.id',
+            )
           else idsPontos[ponto.id] = true
           if (ponto.sala_id !== sala.id)
-            erros.push(
-              ondeP + ': sala_id "' + ponto.sala_id + '" não corresponde à sala "' + sala.id + '"',
+            pend(
+              'funil',
+              'Salas e Funil › ponto ' +
+                nomePonto +
+                ' está vinculado a outra sala — salve o cenário e recarregue',
+              ondeP + '.sala_id',
             )
           if (
             ['abordados', 'qualificados', 'convidados', 'comparecidos'].indexOf(
               ponto.etapa_entrada,
             ) < 0
           )
-            erros.push(ondeP + ': etapa_entrada inválida "' + ponto.etapa_entrada + '"')
-          pegaVM(ponto.volume_entrada, ondeP + '.volume_entrada')
+            pend(
+              'funil',
+              'Salas e Funil › ponto ' + nomePonto + ': selecione a etapa de entrada conhecida',
+              ondeP + '.etapa_entrada',
+            )
+          pegaVM(
+            ponto.volume_entrada,
+            ondeP + '.volume_entrada',
+            'funil',
+            'Salas e Funil › ponto ' +
+              nomePonto +
+              ': informe o volume de entrada mensal (0 é válido)',
+          )
           if (rv(ponto.volume_entrada) < 0)
-            erros.push(ondeP + '.volume_entrada: não pode ser negativo')
+            pend(
+              'funil',
+              'Salas e Funil › ponto ' + nomePonto + ': o volume de entrada não pode ser negativo',
+              ondeP + '.volume_entrada',
+            )
           ;[
-            'taxa_qualificados',
-            'taxa_convidados',
-            'taxa_comparecimento',
-            'taxa_conversao_venda',
-          ].forEach(function (campo) {
+            ['taxa_qualificados', 'a taxa de qualificados'],
+            ['taxa_convidados', 'a taxa de convidados/agendados'],
+            ['taxa_comparecimento', 'a taxa de comparecimento'],
+            ['taxa_conversao_venda', 'a taxa de conversão em venda'],
+          ].forEach(function (par) {
+            var campo = par[0]
             if (ponto[campo] !== undefined) {
-              pegaPerc(ponto[campo], ondeP + '.' + campo)
-              if (rv(ponto[campo]) < 0 || rv(ponto[campo]) > 1)
-                erros.push(ondeP + '.' + campo + ': deve estar entre 0% e 100%')
+              pegaPerc(
+                ponto[campo],
+                ondeP + '.' + campo,
+                'funil',
+                'Salas e Funil › ponto ' + nomePonto + ': informe ' + par[1] + ' (0% é válido)',
+              )
             }
           })
 
-          pegaVM(ponto.custo_transporte_unitario, ondeP + '.custo_transporte_unitario')
+          pegaVM(
+            ponto.custo_transporte_unitario,
+            ondeP + '.custo_transporte_unitario',
+            'funil',
+            'Salas e Funil › ponto ' +
+              nomePonto +
+              ': informe o custo do transporte por casal (0 é válido)',
+          )
           if (rv(ponto.custo_transporte_unitario) < 0)
-            erros.push(ondeP + '.custo_transporte_unitario: não pode ser negativo')
+            pend(
+              'funil',
+              'Salas e Funil › ponto ' +
+                nomePonto +
+                ': o custo do transporte não pode ser negativo',
+              ondeP + '.custo_transporte_unitario',
+            )
           if (
-            ponto.responsavel_transporte !== undefined &&
-            ponto.responsavel_transporte !== null &&
+            !vazio(ponto.responsavel_transporte) &&
             ['comercializadora', 'empreendimento'].indexOf(ponto.responsavel_transporte) < 0
           ) {
-            erros.push(
-              ondeP + '.responsavel_transporte: deve ser "comercializadora" ou "empreendimento"',
+            pend(
+              'funil',
+              'Salas e Funil › ponto ' +
+                nomePonto +
+                ': quem paga o transporte deve ser Comercializadora ou Empreendimento',
+              ondeP + '.responsavel_transporte',
+            )
+          }
+          if (rv(ponto.custo_transporte_unitario) > 0 && vazio(ponto.responsavel_transporte)) {
+            pend(
+              'funil',
+              'Salas e Funil › ponto ' +
+                nomePonto +
+                ': o ponto tem custo de transporte — informe quem paga (Comercializadora ou Empreendimento)',
+              ondeP + '.responsavel_transporte',
             )
           }
           temPontoAtivo = true
           idsSalasComPonto[sala.id] = true
+          numSalasComPonto++
         })
         if (!temPontoAtivo)
-          erros.push(onde + ': sala sem ponto de captação (nenhum canal gera demanda)')
+          pend(
+            'funil',
+            'Salas e Funil › sala ' + nomeSala + ': cadastre ao menos 1 ponto de captação',
+            onde + '.pontos',
+          )
       }
     })
   }
+  if (numSalasComPonto === 0)
+    pend(
+      'funil',
+      'Cadastre ao menos 1 sala de vendas com ponto de captação (aba Salas e Funil)',
+      'premissas.salas',
+    )
 
-  if (!Array.isArray(produtos)) erros.push('produtos deve ser lista')
+  if (!Array.isArray(produtos))
+    pend(
+      'produtos',
+      'Produtos e Mix › cadastre ao menos 1 produto para o empreendimento',
+      'premissas.produtos',
+    )
   else {
+    if (produtos.length === 0)
+      pend(
+        'produtos',
+        'Produtos e Mix › cadastre ao menos 1 produto para o empreendimento (aba Produtos e Mix)',
+        'premissas.produtos',
+      )
     produtos.forEach(function (prod, i) {
       var onde = 'produtos[' + i + ']'
-      if (!prod || typeof prod !== 'object') return erros.push(onde + ': produto inválido')
-      if (!prod.id) erros.push(onde + ': id ausente')
-      else if (idsProdutos[prod.id]) erros.push(onde + ': id de produto duplicado')
+      var nomeProd = prod && prod.nome ? '"' + prod.nome + '"' : 'sem nome'
+      if (!prod || typeof prod !== 'object')
+        return pend('produtos', 'Produtos e Mix › há um produto inválido na lista', onde)
+      if (!prod.id)
+        pend(
+          'produtos',
+          'Produtos e Mix › produto ' +
+            nomeProd +
+            ' está sem identificação — salve o cenário e recarregue',
+          onde + '.id',
+        )
+      else if (idsProdutos[prod.id])
+        pend('produtos', 'Produtos e Mix › produto ' + nomeProd + ' está duplicado', onde + '.id')
       else idsProdutos[prod.id] = true
       if (['multipropriedade', 'timeshare'].indexOf(prod.modalidade) < 0)
-        erros.push(onde + ': modalidade inválida "' + prod.modalidade + '"')
+        pend(
+          'produtos',
+          'Produtos e Mix › produto ' +
+            nomeProd +
+            ': selecione a modalidade (Multipropriedade ou Timeshare)',
+          onde + '.modalidade',
+        )
       else modalidadesPresentes[prod.modalidade] = true
-      pegaVM(prod.preco, onde + '.preco')
-      if (rv(prod.preco) < 0) erros.push(onde + '.preco: não pode ser negativo')
+      pegaVM(
+        prod.preco,
+        onde + '.preco',
+        'produtos',
+        'Produtos e Mix › produto ' + nomeProd + ': informe o preço de venda (0 é válido)',
+      )
+      if (rv(prod.preco) < 0)
+        pend(
+          'produtos',
+          'Produtos e Mix › produto ' + nomeProd + ': o preço de venda não pode ser negativo',
+          onde + '.preco',
+        )
       if (!isNum(Number(prod.estoque_disponivel)))
-        erros.push(onde + '.estoque_disponivel: deve ser número finito')
+        pend(
+          'produtos',
+          'Produtos e Mix › produto ' +
+            nomeProd +
+            ': informe o estoque disponível de unidades (0 é válido)',
+          onde + '.estoque_disponivel',
+        )
       else if (Number(prod.estoque_disponivel) < 0)
-        erros.push(onde + '.estoque_disponivel: não pode ser negativo')
+        pend(
+          'produtos',
+          'Produtos e Mix › produto ' + nomeProd + ': o estoque disponível não pode ser negativo',
+          onde + '.estoque_disponivel',
+        )
     })
   }
 
-  if (!Array.isArray(mix)) erros.push('mix_por_sala deve ser lista')
+  if (!Array.isArray(mix))
+    erros.push({
+      mensagem: 'Produtos e Mix › mix de vendas inválido',
+      caminho: 'premissas.mix_por_sala',
+      aba: 'produtos',
+    })
   else {
     mix.forEach(function (ms, i) {
       var onde = 'mix_por_sala[' + i + ']'
-      if (!ms || typeof ms !== 'object') return erros.push(onde + ': mix inválido')
+      var nomeSalaMix = nomesSalas[ms && ms.sala_id] || (ms && ms.sala_id) || 'sem nome'
+      if (!ms || typeof ms !== 'object')
+        return erros.push({
+          mensagem: 'Produtos e Mix › há um mix inválido na lista',
+          caminho: onde,
+          aba: 'produtos',
+        })
       if (!idsSalas[ms.sala_id])
-        erros.push(onde + ': sala_id "' + ms.sala_id + '" não existe em salas')
+        erros.push({
+          mensagem:
+            'Produtos e Mix › o mix está vinculado a uma sala que não existe — salve o cenário e recarregue',
+          caminho: onde + '.sala_id',
+          aba: 'produtos',
+        })
       else idsSalasComMix[ms.sala_id] = true
-      if (!Array.isArray(ms.produtos)) erros.push(onde + '.produtos deve ser lista')
+      if (!Array.isArray(ms.produtos))
+        erros.push({
+          mensagem:
+            'Produtos e Mix › sala ' +
+            nomeSalaMix +
+            ': defina o mix de produtos vendidos pela sala',
+          caminho: onde + '.produtos',
+          aba: 'produtos',
+        })
       else {
         var soma = 0
         ms.produtos.forEach(function (mp, j) {
           var ondeM = onde + '.produtos[' + j + ']'
-          if (!mp || typeof mp !== 'object') return erros.push(ondeM + ': item inválido')
+          if (!mp || typeof mp !== 'object')
+            return erros.push({
+              mensagem: 'Produtos e Mix › sala ' + nomeSalaMix + ': há um item de mix inválido',
+              caminho: ondeM,
+              aba: 'produtos',
+            })
           if (!idsProdutos[mp.produto_id])
-            erros.push(ondeM + ': produto_id "' + mp.produto_id + '" não existe em produtos')
-          pegaPerc(mp.percentual, ondeM + '.percentual')
+            erros.push({
+              mensagem:
+                'Produtos e Mix › sala ' +
+                nomeSalaMix +
+                ': um item do mix está vinculado a um produto que não existe — salve o cenário e recarregue',
+              caminho: ondeM + '.produto_id',
+              aba: 'produtos',
+            })
+          pegaPerc(
+            mp.percentual,
+            ondeM + '.percentual',
+            'produtos',
+            'Produtos e Mix › sala ' +
+              nomeSalaMix +
+              ': informe o percentual de participação do produto no mix (0% é válido)',
+          )
           var v = rv(mp.percentual)
-          if (v < 0 || v > 1) erros.push(ondeM + '.percentual: deve estar entre 0% e 100%')
           soma += v
         })
         if (soma > 1.0001)
-          erros.push(onde + ': soma dos percentuais (' + Math.round(soma * 100) + '%) excede 100%')
+          erros.push({
+            mensagem:
+              'Produtos e Mix › sala ' +
+              nomeSalaMix +
+              ': a soma dos percentuais do mix (' +
+              Math.round(soma * 100) +
+              '%) excede 100%',
+            caminho: onde + '.produtos',
+            aba: 'produtos',
+          })
         else if (soma < 0.9999)
-          erros.push(
-            onde +
-              ': soma dos percentuais (' +
+          erros.push({
+            mensagem:
+              'Produtos e Mix › sala ' +
+              nomeSalaMix +
+              ': a soma dos percentuais do mix (' +
               Math.round(soma * 100) +
               '%) não fecha 100% — a sala vende apenas o mix informado',
-          )
+            caminho: onde + '.produtos',
+            aba: 'produtos',
+          })
       }
     })
   }
 
   salas.forEach(function (sala) {
     if (sala && sala.id && idsSalasComPonto[sala.id] && !idsSalasComMix[sala.id]) {
-      erros.push(
-        'mix_por_sala: sala "' +
+      erros.push({
+        mensagem:
+          'Produtos e Mix › sala "' +
           (sala.nome || sala.id) +
-          '" não tem mix definido (o mix fecha 100% por nível ativo)',
-      )
+          '" não tem mix definido — informe quais produtos a sala vende e em qual proporção (o mix fecha 100%)',
+        caminho: 'premissas.mix_por_sala',
+        aba: 'produtos',
+      })
     }
   })
 
   if (!cp || typeof cp !== 'object') {
-    erros.push('condicoes_pagamento: ausente ou não informada (pendência bloqueante)')
+    if (modalidadesPresentes['multipropriedade'] || modalidadesPresentes['timeshare'])
+      pend(
+        'pagamento',
+        'Pagamento › informe as condições de pagamento das modalidades com produtos cadastrados',
+        'premissas.condicoes_pagamento',
+      )
   } else {
     function validaCond(mod) {
+      if (!modalidadesPresentes[mod]) return // sem produto da modalidade, o bloco é ignorado
+      var nomeMod = mod === 'multipropriedade' ? 'Multipropriedade' : 'Timeshare'
       var cond = cp[mod]
       if (!cond) {
-        if (modalidadesPresentes[mod]) {
-          erros.push(
-            'condicoes_pagamento.' + mod + ': ausente para produtos existentes da modalidade',
-          )
-        }
+        pend(
+          'pagamento',
+          'Pagamento › ' +
+            nomeMod +
+            ': informe as condições de pagamento (entrada, parcelas e saldo)',
+          'premissas.condicoes_pagamento.' + mod,
+        )
         return
       }
       var onde = 'condicoes_pagamento.' + mod
-      pegaPerc(cond.perc_entrada, onde + '.perc_entrada')
+      pegaPerc(
+        cond.perc_entrada,
+        onde + '.perc_entrada',
+        'pagamento',
+        'Pagamento › ' + nomeMod + ': informe o percentual de entrada (0% é válido)',
+      )
       if (!isNum(Number(cond.parcelas_entrada)) || Number(cond.parcelas_entrada) < 1)
-        erros.push(onde + '.parcelas_entrada: deve ser inteiro >= 1')
+        pend(
+          'pagamento',
+          'Pagamento › ' + nomeMod + ': informe em quantas parcelas a entrada é paga (mínimo 1)',
+          onde + '.parcelas_entrada',
+        )
       if (!isNum(Number(cond.mes_primeira_saldo)) || Number(cond.mes_primeira_saldo) < 0)
-        erros.push(
-          onde + '.mes_primeira_saldo: deve ser inteiro >= 0 (0 = primeira parcela do saldo em M0)',
+        pend(
+          'pagamento',
+          'Pagamento › ' +
+            nomeMod +
+            ': informe em qual mês começa o pagamento do saldo (0 = já no primeiro mês)',
+          onde + '.mes_primeira_saldo',
         )
       if (!isNum(Number(cond.parcelas_saldo)) || Number(cond.parcelas_saldo) < 0)
-        erros.push(onde + '.parcelas_saldo: deve ser >= 0')
+        pend(
+          'pagamento',
+          'Pagamento › ' + nomeMod + ': informe em quantas parcelas o saldo é pago (0 é válido)',
+          onde + '.parcelas_saldo',
+        )
     }
     validaCond('multipropriedade')
     validaCond('timeshare')
   }
 
   if (!ci || typeof ci !== 'object') {
-    erros.push('cancelamentos_inadimplencia: ausente ou não informado (pendência bloqueante)')
+    if (modalidadesPresentes['multipropriedade'] || modalidadesPresentes['timeshare'])
+      pend(
+        'cancelamento',
+        'Cancelamentos › informe as regras de cancelamento e inadimplência das modalidades com produtos cadastrados',
+        'premissas.cancelamentos_inadimplencia',
+      )
   } else {
     function validaCancInad(mod) {
+      if (!modalidadesPresentes[mod]) return // sem produto da modalidade, o bloco é ignorado
+      var nomeMod = mod === 'multipropriedade' ? 'Multipropriedade' : 'Timeshare'
       var cfg = ci[mod]
       if (!cfg) {
-        if (modalidadesPresentes[mod]) {
-          erros.push(
-            'cancelamentos_inadimplencia.' +
-              mod +
-              ': ausente para produtos existentes da modalidade',
-          )
-        }
+        pend(
+          'cancelamento',
+          'Cancelamentos › ' +
+            nomeMod +
+            ': informe as regras de cancelamento e inadimplência da modalidade',
+          'premissas.cancelamentos_inadimplencia.' + mod,
+        )
         return
       }
       var onde = 'cancelamentos_inadimplencia.' + mod
       var c = cfg.cancelamento
       if (c) {
-        pegaPerc(c.taxa, onde + '.cancelamento.taxa')
+        pegaPerc(
+          c.taxa,
+          onde + '.cancelamento.taxa',
+          'cancelamento',
+          'Cancelamentos › ' + nomeMod + ': informe a taxa de cancelamento (0% é válido)',
+        )
         if (!isNum(Number(c.mes_medio)) || Number(c.mes_medio) < 0)
-          erros.push(onde + '.cancelamento.mes_medio: deve ser >= 0')
-        pegaPerc(c.taxa_devolucao, onde + '.cancelamento.taxa_devolucao')
+          pend(
+            'cancelamento',
+            'Cancelamentos › ' +
+              nomeMod +
+              ': informe o mês médio em que o cancelamento ocorre (0 é válido)',
+            onde + '.cancelamento.mes_medio',
+          )
+        pegaPerc(
+          c.taxa_devolucao,
+          onde + '.cancelamento.taxa_devolucao',
+          'cancelamento',
+          'Cancelamentos › ' +
+            nomeMod +
+            ': informe o percentual devolvido no cancelamento (0% é válido)',
+        )
         if (!isNum(Number(c.prazo_devolucao)) || Number(c.prazo_devolucao) < 1)
-          erros.push(
-            onde +
-              '.cancelamento.prazo_devolucao: deve ser >= 1 (meses APÓS o cancelamento em mes_medio)',
+          pend(
+            'cancelamento',
+            'Cancelamentos › ' +
+              nomeMod +
+              ': informe em quantos meses a devolução é paga (mínimo 1)',
+            onde + '.cancelamento.prazo_devolucao',
           )
       }
       var inad = cfg.inadimplencia
       if (inad) {
-        pegaPerc(inad.taxa, onde + '.inadimplencia.taxa')
-        pegaPerc(inad.parcela_recuperavel, onde + '.inadimplencia.parcela_recuperavel')
+        pegaPerc(
+          inad.taxa,
+          onde + '.inadimplencia.taxa',
+          'cancelamento',
+          'Cancelamentos › ' + nomeMod + ': informe a taxa de inadimplência (0% é válido)',
+        )
+        pegaPerc(
+          inad.parcela_recuperavel,
+          onde + '.inadimplencia.parcela_recuperavel',
+          'cancelamento',
+          'Cancelamentos › ' +
+            nomeMod +
+            ': informe o percentual recuperável das parcelas inadimplidas (0% é válido)',
+        )
         if (!isNum(Number(inad.prazo_recuperacao)) || Number(inad.prazo_recuperacao) < 1)
-          erros.push(onde + '.inadimplencia.prazo_recuperacao: deve ser >= 1')
+          pend(
+            'cancelamento',
+            'Cancelamentos › ' +
+              nomeMod +
+              ': informe em quantos meses a parcela inadimplida é recuperada (mínimo 1)',
+            onde + '.inadimplencia.prazo_recuperacao',
+          )
       }
     }
     validaCancInad('multipropriedade')
     validaCancInad('timeshare')
   }
 
-  if (!Array.isArray(rem)) erros.push('remuneracoes deve ser lista')
+  if (!Array.isArray(rem))
+    erros.push({
+      mensagem: 'Remuneração › a lista de remunerações está ausente ou inválida',
+      caminho: 'premissas.remuneracoes',
+      aba: 'remuneracao',
+    })
   else {
     rem.forEach(function (r, i) {
       var onde = 'remuneracoes[' + i + ']'
-      if (!r || typeof r !== 'object') return erros.push(onde + ': remuneração inválida')
+      var descR = r && r.descricao ? '"' + r.descricao + '"' : 'item ' + (i + 1)
+      if (!r || typeof r !== 'object')
+        return erros.push({
+          mensagem: 'Remuneração › há uma remuneração inválida na lista',
+          caminho: onde,
+          aba: 'remuneracao',
+        })
       if (['fixo', 'perc_vgv', 'perc_recebimento', 'retencao_entrada'].indexOf(r.tipo) < 0)
-        erros.push(onde + ': tipo inválido "' + r.tipo + '"')
+        erros.push({
+          mensagem:
+            'Remuneração › ' +
+            descR +
+            ': selecione o tipo de remuneração (fixo, % do VGV, % do recebimento ou retenção de entrada)',
+          caminho: onde + '.tipo',
+          aba: 'remuneracao',
+        })
       if (['adicional', 'compensavel'].indexOf(r.adicional_ou_compensavel) < 0)
-        erros.push(onde + ': adicional_ou_compensavel deve ser "adicional" ou "compensavel"')
-      pegaVM(r.valor, onde + '.valor')
+        erros.push({
+          mensagem:
+            'Remuneração › ' + descR + ': informe se a remuneração é adicional ou compensável',
+          caminho: onde + '.adicional_ou_compensavel',
+          aba: 'remuneracao',
+        })
+      pegaVM(
+        r.valor,
+        onde + '.valor',
+        'remuneracao',
+        'Remuneração › ' + descR + ': informe o valor da remuneração (0 é válido)',
+      )
       if (
         (r.tipo === 'perc_vgv' || r.tipo === 'perc_recebimento' || r.tipo === 'retencao_entrada') &&
         isNum(rv(r.valor)) &&
         (rv(r.valor) < 0 || rv(r.valor) > 1)
       )
-        erros.push(onde + '.valor: percentual deve estar entre 0% e 100%')
-      if (r.tipo === 'fixo' && rv(r.valor) < 0) erros.push(onde + '.valor: não pode ser negativo')
+        erros.push({
+          mensagem: 'Remuneração › ' + descR + ': o percentual deve estar entre 0% e 100%',
+          caminho: onde + '.valor',
+          aba: 'remuneracao',
+        })
+      if (r.tipo === 'fixo' && rv(r.valor) < 0)
+        erros.push({
+          mensagem: 'Remuneração › ' + descR + ': o valor não pode ser negativo',
+          caminho: onde + '.valor',
+          aba: 'remuneracao',
+        })
     })
   }
 
-  if (!Array.isArray(cd)) erros.push('custos_despesas deve ser lista')
+  if (!Array.isArray(cd))
+    erros.push({
+      mensagem: 'Custos e Investimentos › a lista de custos e despesas está ausente ou inválida',
+      caminho: 'premissas.custos_despesas',
+      aba: 'custos',
+    })
   else {
     cd.forEach(function (d, i) {
       var onde = 'custos_despesas[' + i + ']'
-      if (!d || typeof d !== 'object') return erros.push(onde + ': despesa inválida')
+      var descD = d && d.descricao ? '"' + d.descricao + '"' : 'item ' + (i + 1)
+      if (!d || typeof d !== 'object')
+        return erros.push({
+          mensagem: 'Custos e Investimentos › há um custo ou despesa inválido na lista',
+          caminho: onde,
+          aba: 'custos',
+        })
       if (['fixo', 'por_atendimento', 'por_venda', 'perc_vgv'].indexOf(d.tipo) < 0)
-        erros.push(onde + ': tipo inválido "' + d.tipo + '"')
+        erros.push({
+          mensagem:
+            'Custos e Investimentos › ' +
+            descD +
+            ': selecione o tipo de custo (fixo, por atendimento, por venda ou % do VGV)',
+          caminho: onde + '.tipo',
+          aba: 'custos',
+        })
       if (['comercializadora', 'empreendimento'].indexOf(d.responsavel_economico) < 0)
-        erros.push(onde + ': responsavel_economico deve ser "comercializadora" ou "empreendimento"')
+        erros.push({
+          mensagem:
+            'Custos e Investimentos › ' +
+            descD +
+            ': informe o responsável econômico (Comercializadora ou Empreendimento)',
+          caminho: onde + '.responsavel_economico',
+          aba: 'custos',
+        })
       if (
-        d.pagador_inicial &&
+        d.pagador_inicial !== undefined &&
+        d.pagador_inicial !== null &&
         ['comercializadora', 'empreendimento'].indexOf(d.pagador_inicial) < 0
       )
-        erros.push(onde + ': pagador_inicial deve ser "comercializadora" ou "empreendimento"')
-      pegaVM(d.valor, onde + '.valor')
+        erros.push({
+          mensagem:
+            'Custos e Investimentos › ' +
+            descD +
+            ': o pagador inicial deve ser Comercializadora ou Empreendimento',
+          caminho: onde + '.pagador_inicial',
+          aba: 'custos',
+        })
+      pegaVM(
+        d.valor,
+        onde + '.valor',
+        'custos',
+        'Custos e Investimentos › ' + descD + ': informe o valor do custo (0 é válido)',
+      )
       if (d.tipo === 'perc_vgv' && isNum(rv(d.valor)) && (rv(d.valor) < 0 || rv(d.valor) > 1))
-        erros.push(onde + '.valor: percentual deve estar entre 0% e 100%')
+        erros.push({
+          mensagem:
+            'Custos e Investimentos › ' + descD + ': o percentual deve estar entre 0% e 100%',
+          caminho: onde + '.valor',
+          aba: 'custos',
+        })
       if (d.tipo !== 'perc_vgv' && rv(d.valor) < 0)
-        erros.push(onde + '.valor: não pode ser negativo')
+        erros.push({
+          mensagem: 'Custos e Investimentos › ' + descD + ': o valor não pode ser negativo',
+          caminho: onde + '.valor',
+          aba: 'custos',
+        })
       if (d.ponto_id && !d.sala_id)
-        erros.push(onde + ': ponto_id exige sala_id (escopo hierárquico)')
+        erros.push({
+          mensagem:
+            'Custos e Investimentos › ' +
+            descD +
+            ': um custo de ponto precisa indicar a sala à qual pertence',
+          caminho: onde + '.sala_id',
+          aba: 'custos',
+        })
       if (d.sala_id && !idsSalas[d.sala_id])
-        erros.push(onde + ': sala_id "' + d.sala_id + '" não existe em salas')
+        erros.push({
+          mensagem:
+            'Custos e Investimentos › ' +
+            descD +
+            ': o custo está vinculado a uma sala que não existe — salve o cenário e recarregue',
+          caminho: onde + '.sala_id',
+          aba: 'custos',
+        })
       if (d.ponto_id) {
         var achou = false
         salas.forEach(function (sala) {
@@ -376,53 +784,130 @@ function vb_validarPremissas(premissas, horizonte) {
           })
         })
         if (!achou)
-          erros.push(
-            onde + ': ponto_id "' + d.ponto_id + '" não pertence à sala "' + d.sala_id + '"',
-          )
+          erros.push({
+            mensagem:
+              'Custos e Investimentos › ' +
+              descD +
+              ': o custo está vinculado a um ponto que não pertence à sala indicada — salve o cenário e recarregue',
+            caminho: onde + '.ponto_id',
+            aba: 'custos',
+          })
       }
       if (
         d.prazo_pagamento_meses !== undefined &&
         (!isNum(Number(d.prazo_pagamento_meses)) || Number(d.prazo_pagamento_meses) < 0)
       )
-        erros.push(onde + '.prazo_pagamento_meses: deve ser >= 0')
+        erros.push({
+          mensagem:
+            'Custos e Investimentos › ' +
+            descD +
+            ': o prazo de pagamento em meses não pode ser negativo',
+          caminho: onde + '.prazo_pagamento_meses',
+          aba: 'custos',
+        })
       if (
         d.prazo_reembolso_meses !== undefined &&
         (!isNum(Number(d.prazo_reembolso_meses)) || Number(d.prazo_reembolso_meses) < 0)
       )
-        erros.push(onde + '.prazo_reembolso_meses: deve ser >= 0')
+        erros.push({
+          mensagem:
+            'Custos e Investimentos › ' +
+            descD +
+            ': o prazo de reembolso em meses não pode ser negativo',
+          caminho: onde + '.prazo_reembolso_meses',
+          aba: 'custos',
+        })
     })
   }
 
-  if (!Array.isArray(inv)) erros.push('investimentos deve ser lista')
+  if (!Array.isArray(inv))
+    erros.push({
+      mensagem: 'Custos e Investimentos › a lista de investimentos está ausente ou inválida',
+      caminho: 'premissas.investimentos',
+      aba: 'custos',
+    })
   else {
     inv.forEach(function (v, i) {
       var onde = 'investimentos[' + i + ']'
-      if (!v || typeof v !== 'object') return erros.push(onde + ': investimento inválido')
+      var descV = v && v.descricao ? '"' + v.descricao + '"' : 'item ' + (i + 1)
+      if (!v || typeof v !== 'object')
+        return erros.push({
+          mensagem: 'Custos e Investimentos › há um investimento inválido na lista',
+          caminho: onde,
+          aba: 'custos',
+        })
       if (!isNum(Number(v.mes)) || Number(v.mes) < 0)
-        erros.push(onde + '.mes: deve ser inteiro >= 0')
+        erros.push({
+          mensagem:
+            'Custos e Investimentos › ' + descV + ': informe o mês do investimento (0 é válido)',
+          caminho: onde + '.mes',
+          aba: 'custos',
+        })
       if (!isNum(Number(v.valor)) || Number(v.valor) < 0)
-        erros.push(onde + '.valor: deve ser número finito >= 0')
+        erros.push({
+          mensagem:
+            'Custos e Investimentos › ' + descV + ': informe o valor do investimento (0 é válido)',
+          caminho: onde + '.valor',
+          aba: 'custos',
+        })
       if (['comercializadora', 'empreendimento'].indexOf(v.parte) < 0)
-        erros.push(onde + ': parte deve ser "comercializadora" ou "empreendimento"')
+        erros.push({
+          mensagem:
+            'Custos e Investimentos › ' +
+            descV +
+            ': informe qual parte investe (Comercializadora ou Empreendimento)',
+          caminho: onde + '.parte',
+          aba: 'custos',
+        })
       if (
         ['obra/reforma', 'mobiliario/equipamentos', 'projetos e implantacao'].indexOf(v.categoria) <
         0
       )
-        erros.push(onde + ': categoria inválida "' + v.categoria + '"')
+        erros.push({
+          mensagem: 'Custos e Investimentos › ' + descV + ': selecione a categoria do investimento',
+          caminho: onde + '.categoria',
+          aba: 'custos',
+        })
     })
   }
 
   if (!caixa || typeof caixa !== 'object') {
-    erros.push('caixa_inicial: ausente ou não informado (pendência bloqueante)')
+    erros.push({
+      mensagem:
+        'Custos e Investimentos › informe o caixa inicial da Comercializadora e do Empreendimento (0 é válido)',
+      caminho: 'premissas.caixa_inicial',
+      aba: 'custos',
+    })
   } else {
-    if (isNum(Number(caixa.comercializadora))) {
-      if (Number(caixa.comercializadora) < 0)
-        erros.push('caixa_inicial.comercializadora: não pode ser negativo')
-    } else erros.push('caixa_inicial.comercializadora: deve ser número finito')
-    if (isNum(Number(caixa.empreendimento))) {
-      if (Number(caixa.empreendimento) < 0)
-        erros.push('caixa_inicial.empreendimento: não pode ser negativo')
-    } else erros.push('caixa_inicial.empreendimento: deve ser número finito')
+    if (vazio(caixa.comercializadora) || !isNum(Number(caixa.comercializadora))) {
+      erros.push({
+        mensagem:
+          'Custos e Investimentos › informe o caixa inicial da Comercializadora (0 é válido)',
+        caminho: 'premissas.caixa_inicial.comercializadora',
+        aba: 'custos',
+      })
+    } else if (Number(caixa.comercializadora) < 0) {
+      erros.push({
+        mensagem:
+          'Custos e Investimentos › o caixa inicial da Comercializadora não pode ser negativo',
+        caminho: 'premissas.caixa_inicial.comercializadora',
+        aba: 'custos',
+      })
+    }
+    if (vazio(caixa.empreendimento) || !isNum(Number(caixa.empreendimento))) {
+      erros.push({
+        mensagem: 'Custos e Investimentos › informe o caixa inicial do Empreendimento (0 é válido)',
+        caminho: 'premissas.caixa_inicial.empreendimento',
+        aba: 'custos',
+      })
+    } else if (Number(caixa.empreendimento) < 0) {
+      erros.push({
+        mensagem:
+          'Custos e Investimentos › o caixa inicial do Empreendimento não pode ser negativo',
+        caminho: 'premissas.caixa_inicial.empreendimento',
+        aba: 'custos',
+      })
+    }
   }
 
   return erros
