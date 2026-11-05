@@ -44,7 +44,6 @@ import {
   Building2,
   Trash2,
   Copy,
-  AlertCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { EstagioEmpreendimento } from '@/types/viabilidade'
@@ -411,22 +410,6 @@ export const MeusEstudos: React.FC = () => {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
-
-      {/* Aviso de escopo e limites do Blueprint v1.3 */}
-      <div className="rounded-lg border border-blue-200 bg-blue-50/70 dark:border-blue-900/40 dark:bg-blue-950/20 p-4 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-3">
-        <AlertCircle className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" />
-        <div className="space-y-1">
-          <p className="font-semibold">
-            Primeira entrega parcial do Blueprint v1.3 • Premissas e Caixa Separado
-          </p>
-          <p className="text-muted-foreground dark:text-blue-300">
-            Faltam hotelaria completa, direitos/capacidade contratual, tributos, financiamento e
-            encargos ainda não modelados (não são zero no negócio real). Os caixas da
-            comercializadora e do empreendimento operam com partidas dobradas e transferências
-            conciliadas.
-          </p>
-        </div>
       </div>
 
       {/* Studies Listing */}

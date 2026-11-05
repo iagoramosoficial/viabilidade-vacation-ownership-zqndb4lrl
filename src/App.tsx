@@ -10,6 +10,7 @@ import { PaginaTestes } from './pages/PaginaTestes'
 import NotFound from './pages/NotFound'
 import { AdminPage } from './pages/Admin'
 import Layout from './components/Layout'
+import MeuPerfil from './pages/MeuPerfil'
 
 const App = () => (
   <BrowserRouter>
@@ -18,9 +19,10 @@ const App = () => (
         <Toaster />
         <Sonner richColors position="top-right" />
         <Routes>
+          <Route path="/login" element={<Login />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
+            <Route path="/perfil" element={<MeuPerfil />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/testes" element={<PaginaTestes />} />
             <Route path="/estudo/:estudoId/cenario/:cenarioId" element={<EstudoCenario />} />
