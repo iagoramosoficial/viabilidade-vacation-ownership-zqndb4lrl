@@ -8,7 +8,7 @@ export type EstagioEmpreendimento = 'operando' | 'reforma/expansao' | 'novo proj
 export type PapelUsuario = 'admin_master' | 'analista' | 'viewer'
 
 export interface ValorMensalConfig {
-  base: number
+  base: number | null // null = não informado (vira pendência); zero explícito digitado é válido
   ajustes?: Record<number, number> // mesIndex -> valor manual override (zero is valid!)
 }
 
@@ -23,6 +23,7 @@ export interface PontoCaptacao {
   taxa_comparecimento?: ValorMensalConfig // Convidados -> Comparecidos (0..1)
   taxa_conversao_venda: ValorMensalConfig // Comparecidos Efetivos -> Venda (0..1)
   custo_transporte_unitario: ValorMensalConfig
+  responsavel_transporte?: ResponsavelEconomico | null // null = não informado (pendência quando custo > 0)
 }
 
 export interface SalaVendas {
@@ -37,7 +38,7 @@ export interface ProdutoEstudo {
   nome: string
   modalidade: ModalidadeProduto
   preco: ValorMensalConfig
-  estoque_disponivel: number // Informado manualmente pelo usuário; UI avisa que não foi validado por hotelaria/direitos
+  estoque_disponivel: number | null // Informado manualmente pelo usuário; UI avisa que não foi validado por hotelaria/direitos
 }
 
 export interface MixProdutoSala {
@@ -51,23 +52,23 @@ export interface MixSala {
 }
 
 export interface CondicaoPagamentoModalidade {
-  perc_entrada: number // ex: 0.20
-  parcelas_entrada: number // ex: 1 ou 2
-  mes_primeira_saldo: number // relativo à venda (ex: 1 para mês seguinte, 2 para 2 meses depois)
-  parcelas_saldo: number // quantidade de parcelas nominais
+  perc_entrada: number | null // ex: 0.20; null = não informado (pendência)
+  parcelas_entrada: number | null // ex: 1 ou 2
+  mes_primeira_saldo: number | null // relativo à venda (ex: 1 para mês seguinte, 2 para 2 meses depois)
+  parcelas_saldo: number | null // quantidade de parcelas nominais
 }
 
 export interface CancelamentoModalidade {
-  taxa: number // taxa de cancelamento (0..1)
-  mes_medio: number
-  taxa_devolucao: number // devolução sobre elegíveis recebidos (0..1)
-  prazo_devolucao: number // meses após cancelamento
+  taxa: number | null // taxa de cancelamento (0..1); null = não informado (pendência)
+  mes_medio: number | null
+  taxa_devolucao: number | null // devolução sobre elegíveis recebidos (0..1)
+  prazo_devolucao: number | null // meses após cancelamento
 }
 
 export interface InadimplenciaModalidade {
-  taxa: number // inadimplência sobre cobranças ativas (0..1)
-  parcela_recuperavel: number // fração que é recuperada (0..1)
-  prazo_recuperacao: number // meses de atraso para recuperação
+  taxa: number | null // inadimplência sobre cobranças ativas (0..1)
+  parcela_recuperavel: number | null // fração que é recuperada (0..1)
+  prazo_recuperacao: number | null // meses de atraso para recuperação
 }
 
 export interface RegrasCancelamentoInadimplencia {
@@ -113,8 +114,8 @@ export interface DesembolsoInvestimento {
 }
 
 export interface CaixaInicialPartes {
-  comercializadora: number
-  empreendimento: number
+  comercializadora: number | null
+  empreendimento: number | null
 }
 
 export interface PremissasEstudo {

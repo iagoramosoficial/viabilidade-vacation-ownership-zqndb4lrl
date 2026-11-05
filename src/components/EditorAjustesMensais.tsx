@@ -38,6 +38,7 @@ export const EditorAjustesMensais: React.FC<EditorAjustesMensaisProps> = ({
     const map: Record<number, string> = {}
     if (valorConfig.ajustes) {
       Object.entries(valorConfig.ajustes).forEach(([m, v]) => {
+        if (v === null || v === undefined) return
         const val = isPorcentagem ? Number(v) * 100 : Number(v)
         map[Number(m)] = String(val)
       })
@@ -101,7 +102,11 @@ export const EditorAjustesMensais: React.FC<EditorAjustesMensaisProps> = ({
           <DialogDescription className="text-xs">
             Valor base replicado:{' '}
             <strong className="text-foreground">
-              {isPorcentagem ? `${(valorConfig.base * 100).toFixed(2)}%` : valorConfig.base}
+              {valorConfig.base === null
+                ? '(não informado)'
+                : isPorcentagem
+                  ? `${(valorConfig.base * 100).toFixed(2)}%`
+                  : valorConfig.base}
             </strong>
             . Preencha apenas os meses com sazonalidade/ajuste. O valor{' '}
             <strong className="text-foreground">0</strong> é um override explícito válido. Deixe em
@@ -120,12 +125,21 @@ export const EditorAjustesMensais: React.FC<EditorAjustesMensaisProps> = ({
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="font-semibold text-foreground">{getRotuloMes(mIdx)}</span>
                     <span className="text-muted-foreground text-[10px]">
-                      Herdado: {isPorcentagem ? `${(herdado * 100).toFixed(1)}%` : herdado}
+                      Herdado:{' '}
+                      {herdado === null
+                        ? '—'
+                        : isPorcentagem
+                          ? `${(herdado * 100).toFixed(1)}%`
+                          : herdado}
                     </span>
                   </div>
                   <Input
                     className="h-8 text-xs font-mono"
-                    placeholder={`Herda base (${isPorcentagem ? `${(herdado * 100).toFixed(1)}%` : herdado})`}
+                    placeholder={
+                      herdado === null
+                        ? 'Base não informada'
+                        : `Herda base (${isPorcentagem ? `${(herdado * 100).toFixed(1)}%` : herdado})`
+                    }
                     value={val}
                     onChange={(e) => {
                       const next = { ...ajustesTemp }
