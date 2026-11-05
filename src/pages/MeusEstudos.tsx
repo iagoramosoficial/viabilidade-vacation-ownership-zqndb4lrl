@@ -141,110 +141,28 @@ export const MeusEstudos: React.FC = () => {
         criador: user.id,
       })
 
-      // 2. Create Base scenario (editable, independent, with structured empty/neutral premissas)
-      const premissasIniciais = {
-        salas: [
-          {
-            id: 'sala_' + Math.random().toString(36).substring(2, 7),
-            nome: 'Sala Principal',
-            capacidade_mensal: { base: 120, ajustes: {} },
-            pontos: [
-              {
-                id: 'pnt_' + Math.random().toString(36).substring(2, 7),
-                sala_id: '',
-                nome: 'Ponto 01',
-                etapa_entrada: 'comparecidos',
-                volume_entrada: { base: 100, ajustes: {} },
-                taxa_qualificados: { base: 1.0, ajustes: {} },
-                taxa_convidados: { base: 1.0, ajustes: {} },
-                taxa_comparecimento: { base: 1.0, ajustes: {} },
-                taxa_conversao_venda: { base: 0.18, ajustes: {} },
-                custo_transporte_unitario: { base: 0, ajustes: {} },
-              },
-            ],
-          },
-        ],
-        produtos: [
-          {
-            id: 'prd_' + Math.random().toString(36).substring(2, 7),
-            nome: 'Fração Multipropriedade 2Q',
-            modalidade: 'multipropriedade',
-            preco: { base: 45000, ajustes: {} },
-            estoque_disponivel: 150,
-          },
-        ],
+      // 2. Create Base scenario with empty premissas (no pre-filled numbers)
+      const premissasVazias = {
+        salas: [],
+        produtos: [],
         mix_por_sala: [],
-        condicoes_pagamento: {
-          multipropriedade: {
-            perc_entrada: 0.15,
-            parcelas_entrada: 2,
-            mes_primeira_saldo: 2,
-            parcelas_saldo: 48,
-          },
-          timeshare: {
-            perc_entrada: 0.2,
-            parcelas_entrada: 1,
-            mes_primeira_saldo: 1,
-            parcelas_saldo: 24,
-          },
-        },
-        cancelamentos_inadimplencia: {
-          multipropriedade: {
-            cancelamento: { taxa: 0.08, mes_medio: 2, taxa_devolucao: 0.7, prazo_devolucao: 1 },
-            inadimplencia: { taxa: 0.05, parcela_recuperavel: 0.6, prazo_recuperacao: 2 },
-          },
-          timeshare: {
-            cancelamento: { taxa: 0.05, mes_medio: 1, taxa_devolucao: 0.5, prazo_devolucao: 1 },
-            inadimplencia: { taxa: 0.04, parcela_recuperavel: 0.5, prazo_recuperacao: 2 },
-          },
-        },
-        remuneracoes: [
-          {
-            id: 'rem_1',
-            nome: 'Comissão sobre VGV',
-            tipo: 'perc_vgv',
-            valor: { base: 0.12, ajustes: {} },
-            adicional_ou_compensavel: 'adicional',
-          },
-        ],
-        custos_despesas: [
-          {
-            id: 'desp_1',
-            nome: 'Equipe e Coordenação da Sala',
-            tipo: 'fixo',
-            valor: { base: 25000, ajustes: {} },
-            responsavel_economico: 'comercializadora',
-          },
-        ],
+        condicoes_pagamento: {},
+        cancelamentos_inadimplencia: {},
+        remuneracoes: [],
+        custos_despesas: [],
         investimentos: [],
-        caixa_inicial: {
-          comercializadora: 50000,
-          empreendimento: 100000,
-        },
+        caixa_inicial: {},
       }
-
-      // Fix sala_id reference
-      premissasIniciais.salas[0].pontos[0].sala_id = premissasIniciais.salas[0].id
-      premissasIniciais.mix_por_sala = [
-        {
-          sala_id: premissasIniciais.salas[0].id,
-          produtos: [
-            {
-              produto_id: premissasIniciais.produtos[0].id,
-              percentual: { base: 1.0, ajustes: {} },
-            },
-          ],
-        },
-      ]
 
       const cenarioBase = await pb.collection('cenarios').create({
         estudo: novoEstudo.id,
         nome: 'Cenário Base',
-        descricao: 'Cenário base inicial com premissas padrão para edição',
+        descricao: 'Cenário base inicial com premissas vazias para preenchimento',
         is_base: true,
         schema_version: 1,
-        premissas: premissasIniciais,
+        premissas: premissasVazias,
         is_stale: true,
+        is_exemplo: false,
       })
 
       toast.success('Estudo e Cenário Base criados com sucesso!')
@@ -298,6 +216,13 @@ export const MeusEstudos: React.FC = () => {
     }
   }
 
+  const estagioAjuda: Record<EstagioEmpreendimento, string> = {
+    operando: 'Hotel existente em funcionamento.',
+    'reforma/expansao': 'Existente que será ampliado ou reformado.',
+    'novo projeto': 'Construção do zero.',
+    combinado: 'Parte já opera, parte é nova.',
+  }
+
   const estagioBadges: Record<
     EstagioEmpreendimento,
     { label: string; variant: 'default' | 'secondary' | 'outline' }
@@ -327,7 +252,7 @@ export const MeusEstudos: React.FC = () => {
         <Dialog open={modalAberto} onOpenChange={setModalAberto}>
           <DialogTrigger asChild>
             <Button className="gap-2 shadow-sm">
-              <Plus className="h-4 w-4" /> Novo Estudo
+              <Plus className="h-4 w-4" /> Criar estudo de viabilidade
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
@@ -394,6 +319,7 @@ export const MeusEstudos: React.FC = () => {
                       <SelectItem value="combinado">Combinado</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground mt-0.5">{estagioAjuda[estagio]}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

@@ -28,12 +28,16 @@ interface TelaResultadosProps {
   resultado: ResultadoSimulacaoViabilidade
   isStale: boolean
   onRecalcular: () => void
+  isExemplo?: boolean
+  onRemoverExemplo?: () => void
 }
 
 export const TelaResultados: React.FC<TelaResultadosProps> = ({
   resultado,
   isStale,
   onRecalcular,
+  isExemplo,
+  onRemoverExemplo,
 }) => {
   const {
     resumo_global,
@@ -46,6 +50,33 @@ export const TelaResultados: React.FC<TelaResultadosProps> = ({
 
   return (
     <div className="space-y-6 pt-2">
+      {/* Selo fixo de Exemplo Demonstrativo */}
+      {isExemplo && (
+        <Alert className="border-amber-400 bg-amber-500/15 text-amber-950 dark:text-amber-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="border-amber-600 bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 font-semibold text-xs uppercase tracking-wider"
+            >
+              Exemplo demonstrativo — números fictícios
+            </Badge>
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              Estes resultados foram gerados a partir de premissas fictícias ilustrativas.
+            </span>
+          </div>
+          {onRemoverExemplo && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRemoverExemplo}
+              className="h-7 text-xs bg-background/80 hover:bg-background border-amber-300 dark:border-amber-800 shrink-0"
+            >
+              Remover marcação de exemplo
+            </Button>
+          )}
+        </Alert>
+      )}
+
       {/* Stale Warning Bar */}
       {isStale && (
         <Alert className="border-amber-300 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200">

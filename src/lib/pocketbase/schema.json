@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-04T23:26:36.310Z",
+  "generatedAt": "2026-11-05T03:06:34.083Z",
   "collections": [
     {
       "name": "users",
@@ -304,6 +304,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "is_exemplo",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": ["CREATE INDEX idx_cenarios_estudo ON cenarios (estudo)"]

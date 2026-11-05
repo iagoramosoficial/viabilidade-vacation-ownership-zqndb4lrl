@@ -1,5 +1,5 @@
 // Screen for Premissas & Running Simulation
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import pb from '@/lib/pocketbase/client'
@@ -39,6 +39,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { EditorAjustesMensais } from '@/components/EditorAjustesMensais'
 import { TelaResultados } from '@/components/TelaResultados'
+import { vb_validarPremissas } from '@/lib/pocketbase/viabilidade_core.mjs'
 import {
   Calculator,
   Save,
@@ -56,6 +57,7 @@ import {
   Briefcase,
   CheckCircle2,
   Copy,
+  Sparkles,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -70,12 +72,25 @@ export const EstudoCenario: React.FC = () => {
   const [premissas, setPremissas] = useState<PremissasEstudo | null>(null)
   const [resultado, setResultado] = useState<ResultadoSimulacaoViabilidade | null>(null)
   const [isStale, setIsStale] = useState(false)
+  const [isExemplo, setIsExemplo] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [calculando, setCalculando] = useState(false)
+  const [carregandoExemplo, setCarregandoExemplo] = useState(false)
   const [abaAtiva, setAbaAtiva] = useState('funil')
   const [mostrarResultados, setMostrarResultados] = useState(false)
+
+  const horizonte = estudo?.horizonte_meses || 36
+  const mesIni = estudo?.mes_inicial || '2025-01'
+
+  // Validação determinística incondicional de premissas (vb_validarPremissas)
+  const pendenciasValidacao = useMemo(() => {
+    if (!premissas) return ['Premissas não carregadas']
+    return vb_validarPremissas(premissas, horizonte)
+  }, [premissas, horizonte])
+
+  const temPendencias = pendenciasValidacao.length > 0
 
   const carregarDados = useCallback(async () => {
     if (!estudoId || !cenarioId) return
@@ -92,42 +107,43 @@ export const EstudoCenario: React.FC = () => {
       setCenario(cen)
       setTodosCenarios(cens)
       setIsStale(cen.is_stale || false)
+      setIsExemplo(Boolean(cen.is_exemplo))
 
       let p = cen.premissas as PremissasEstudo
       if (!p || !p.salas) {
-        // Fallback default structure
+        // Fallback: premissas vazias (sem números pré-definidos)
         p = {
           salas: [],
           produtos: [],
           mix_por_sala: [],
           condicoes_pagamento: {
             multipropriedade: {
-              perc_entrada: 0.15,
-              parcelas_entrada: 2,
-              mes_primeira_saldo: 2,
-              parcelas_saldo: 48,
+              perc_entrada: 0,
+              parcelas_entrada: 0,
+              mes_primeira_saldo: 0,
+              parcelas_saldo: 0,
             },
             timeshare: {
-              perc_entrada: 0.2,
-              parcelas_entrada: 1,
-              mes_primeira_saldo: 1,
-              parcelas_saldo: 24,
+              perc_entrada: 0,
+              parcelas_entrada: 0,
+              mes_primeira_saldo: 0,
+              parcelas_saldo: 0,
             },
           },
           cancelamentos_inadimplencia: {
             multipropriedade: {
-              cancelamento: { taxa: 0.08, mes_medio: 2, taxa_devolucao: 0.7, prazo_devolucao: 1 },
-              inadimplencia: { taxa: 0.05, parcela_recuperavel: 0.6, prazo_recuperacao: 2 },
+              cancelamento: { taxa: 0, mes_medio: 0, taxa_devolucao: 0, prazo_devolucao: 0 },
+              inadimplencia: { taxa: 0, parcela_recuperavel: 0, prazo_recuperacao: 0 },
             },
             timeshare: {
-              cancelamento: { taxa: 0.05, mes_medio: 1, taxa_devolucao: 0.5, prazo_devolucao: 1 },
-              inadimplencia: { taxa: 0.04, parcela_recuperavel: 0.5, prazo_recuperacao: 2 },
+              cancelamento: { taxa: 0, mes_medio: 0, taxa_devolucao: 0, prazo_devolucao: 0 },
+              inadimplencia: { taxa: 0, parcela_recuperavel: 0, prazo_recuperacao: 0 },
             },
           },
           remuneracoes: [],
           custos_despesas: [],
           investimentos: [],
-          caixa_inicial: { comercializadora: 50000, empreendimento: 100000 },
+          caixa_inicial: { comercializadora: 0, empreendimento: 0 },
         }
       }
       setPremissas(p)
@@ -185,6 +201,129 @@ export const EstudoCenario: React.FC = () => {
     }
   }
 
+  const carregarExemploDemonstrativo = async () => {
+    if (!cenarioId) return
+    try {
+      setCarregandoExemplo(true)
+      const premissasExemplo: PremissasEstudo = {
+        salas: [
+          {
+            id: 'sal_exemplo_1',
+            nome: 'Sala Principal - Resort (Exemplo)',
+            capacidade_mensal: { base: 120, ajustes: {} },
+            pontos: [
+              {
+                id: 'pnt_exemplo_1',
+                sala_id: 'sal_exemplo_1',
+                nome: 'Recepção / Lobby (Exemplo Fictício)',
+                etapa_entrada: 'comparecidos',
+                volume_entrada: { base: 80, ajustes: {} },
+                taxa_qualificados: { base: 1.0, ajustes: {} },
+                taxa_convidados: { base: 1.0, ajustes: {} },
+                taxa_comparecimento: { base: 1.0, ajustes: {} },
+                taxa_conversao_venda: { base: 0.2, ajustes: {} },
+                custo_transporte_unitario: { base: 0, ajustes: {} },
+              },
+            ],
+          },
+        ],
+        produtos: [
+          {
+            id: 'prd_exemplo_1',
+            nome: 'Fração 2 Quartos Luxo (Exemplo)',
+            modalidade: 'multipropriedade',
+            preco: { base: 45000, ajustes: {} },
+            estoque_disponivel: 120,
+          },
+        ],
+        mix_por_sala: [
+          {
+            sala_id: 'sal_exemplo_1',
+            produtos: [
+              {
+                produto_id: 'prd_exemplo_1',
+                percentual: { base: 1.0, ajustes: {} },
+              },
+            ],
+          },
+        ],
+        condicoes_pagamento: {
+          multipropriedade: {
+            perc_entrada: 0.15,
+            parcelas_entrada: 2,
+            mes_primeira_saldo: 2,
+            parcelas_saldo: 48,
+          },
+          timeshare: {
+            perc_entrada: 0.2,
+            parcelas_entrada: 1,
+            mes_primeira_saldo: 1,
+            parcelas_saldo: 24,
+          },
+        },
+        cancelamentos_inadimplencia: {
+          multipropriedade: {
+            cancelamento: { taxa: 0.08, mes_medio: 2, taxa_devolucao: 0.7, prazo_devolucao: 1 },
+            inadimplencia: { taxa: 0.05, parcela_recuperavel: 0.6, prazo_recuperacao: 2 },
+          },
+          timeshare: {
+            cancelamento: { taxa: 0.05, mes_medio: 1, taxa_devolucao: 0.5, prazo_devolucao: 1 },
+            inadimplencia: { taxa: 0.04, parcela_recuperavel: 0.5, prazo_recuperacao: 2 },
+          },
+        },
+        remuneracoes: [
+          {
+            id: 'rem_exemplo_1',
+            nome: 'Comissão Comercial Padrão (Exemplo)',
+            tipo: 'perc_vgv',
+            valor: { base: 0.12, ajustes: {} },
+            adicional_ou_compensavel: 'adicional',
+          },
+        ],
+        custos_despesas: [
+          {
+            id: 'desp_exemplo_1',
+            nome: 'Custo Fixo Sala / Administrativo (Exemplo)',
+            tipo: 'fixo',
+            valor: { base: 15000, ajustes: {} },
+            responsavel_economico: 'comercializadora',
+          },
+        ],
+        investimentos: [],
+        caixa_inicial: { comercializadora: 50000, empreendimento: 100000 },
+      }
+
+      await pb.collection('cenarios').update(cenarioId, {
+        premissas: premissasExemplo,
+        is_exemplo: true,
+        is_stale: true,
+      })
+      setPremissas(premissasExemplo)
+      setIsExemplo(true)
+      setIsStale(true)
+      toast.success('Exemplo demonstrativo carregado com sucesso!')
+    } catch (err: unknown) {
+      toast.error('Erro ao carregar exemplo: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setCarregandoExemplo(false)
+    }
+  }
+
+  const removerMarcacaoExemplo = async () => {
+    if (!cenarioId) return
+    try {
+      await pb.collection('cenarios').update(cenarioId, {
+        is_exemplo: false,
+      })
+      setIsExemplo(false)
+      toast.success('Marcação de exemplo removida.')
+    } catch (err: unknown) {
+      toast.error(
+        'Erro ao atualizar marcação: ' + (err instanceof Error ? err.message : String(err)),
+      )
+    }
+  }
+
   const calcularSimulacao = async () => {
     if (!cenarioId || !premissas) return
     try {
@@ -239,9 +378,6 @@ export const EstudoCenario: React.FC = () => {
       </div>
     )
   }
-
-  const horizonte = estudo.horizonte_meses || 36
-  const mesIni = estudo.mes_inicial || '2025-01'
 
   // Handlers for Premissas Tabs
   const adicionarSala = () => {
@@ -404,6 +540,19 @@ export const EstudoCenario: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Botão Carregar Exemplo Demonstrativo */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={carregarExemploDemonstrativo}
+            disabled={carregandoExemplo}
+            className="gap-1.5 text-xs h-9 border-dashed border-amber-500/80 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-900 dark:text-amber-200"
+            title="Preencher com números fictícios de demonstração"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+            {carregandoExemplo ? 'Carregando Exemplo...' : 'Carregar exemplo demonstrativo'}
+          </Button>
+
           {/* Scenario Selector Dropdown */}
           <Select
             value={cenario.id}
@@ -435,14 +584,19 @@ export const EstudoCenario: React.FC = () => {
           </Button>
 
           <Button
-            variant={isStale || !resultado ? 'default' : 'secondary'}
+            variant={temPendencias ? 'outline' : isStale || !resultado ? 'default' : 'secondary'}
             size="sm"
             onClick={calcularSimulacao}
-            disabled={calculando}
+            disabled={calculando || temPendencias}
+            title={
+              temPendencias
+                ? 'Preencha as premissas obrigatórias para habilitar o cálculo'
+                : 'Calcular'
+            }
             className="gap-1.5 text-xs h-9 font-semibold shadow-sm"
           >
             <Calculator className="h-4 w-4" />
-            {calculando ? 'Calculando no Backend...' : 'Calcular Simulação'}
+            {calculando ? 'Calculando no Backend...' : 'Calcular'}
           </Button>
 
           {resultado && (
@@ -458,6 +612,75 @@ export const EstudoCenario: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Selo fixo de Exemplo Demonstrativo no topo do Cenário */}
+      {isExemplo && (
+        <Alert className="border-amber-400 bg-amber-500/15 text-amber-950 dark:text-amber-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="border-amber-600 bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 font-semibold text-xs uppercase tracking-wider"
+            >
+              Exemplo demonstrativo — números fictícios
+            </Badge>
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              Premissas preenchidas com valores fictícios para demonstração. O usuário pode editar
+              tudo.
+            </span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={removerMarcacaoExemplo}
+            className="h-7 text-xs bg-background/80 hover:bg-background border-amber-300 dark:border-amber-800 shrink-0"
+          >
+            Remover marcação de exemplo
+          </Button>
+        </Alert>
+      )}
+
+      {/* Bloco de Pendências de Validação de Premissas */}
+      {temPendencias && (
+        <Alert className="border-rose-300 bg-rose-50/70 dark:border-rose-900/60 dark:bg-rose-950/30 text-rose-950 dark:text-rose-200">
+          <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400 mt-0.5" />
+          <div className="space-y-1.5 w-full">
+            <div className="flex items-center justify-between">
+              <AlertTitle className="text-xs font-bold text-rose-900 dark:text-rose-200 flex items-center gap-2">
+                <span>
+                  Pendências obrigatórias antes de calcular ({pendenciasValidacao.length})
+                </span>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] border-rose-300 text-rose-700 dark:text-rose-300"
+                >
+                  Bloqueante
+                </Badge>
+              </AlertTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={carregarExemploDemonstrativo}
+                className="h-6 text-[11px] text-rose-800 dark:text-rose-300 hover:text-rose-950 hover:bg-rose-100 dark:hover:bg-rose-900/40 p-1 font-medium"
+              >
+                Preencher com exemplo demonstrativo →
+              </Button>
+            </div>
+            <AlertDescription className="text-xs text-rose-800 dark:text-rose-300 space-y-1">
+              <p className="text-[11px]">
+                O botão <strong>Calcular</strong> permanece desabilitado enquanto houver pendências
+                no preenchimento das premissas:
+              </p>
+              <ul className="list-disc list-inside max-h-40 overflow-y-auto pl-1 space-y-0.5 text-[11px] font-mono bg-background/50 p-2 rounded border border-rose-200/50 dark:border-rose-900/50">
+                {pendenciasValidacao.map((item, idx) => (
+                  <li key={idx} className="truncate" title={item}>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
 
       {/* Main Results View (when available and toggled) */}
       {mostrarResultados && resultado && (
@@ -480,6 +703,8 @@ export const EstudoCenario: React.FC = () => {
             resultado={resultado}
             isStale={isStale}
             onRecalcular={calcularSimulacao}
+            isExemplo={isExemplo}
+            onRemoverExemplo={removerMarcacaoExemplo}
           />
         </div>
       )}
