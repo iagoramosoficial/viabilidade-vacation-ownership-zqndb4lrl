@@ -345,10 +345,10 @@ export const EstudoCenario: React.FC = () => {
         premissas: premissas,
       })
 
-      // Call deterministic calculation endpoint on backend
+      // Call deterministic calculation endpoint on backend (sending premissas explicitly)
       const res = await pb.send('/backend/v1/viabilidade/simular', {
         method: 'POST',
-        body: { cenario_id: cenarioId },
+        body: { cenario_id: cenarioId, premissas: premissas },
       })
 
       if (res.status === 'sucesso' && res.resultado) {

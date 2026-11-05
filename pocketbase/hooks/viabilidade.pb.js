@@ -288,7 +288,12 @@ routerAdd('POST', '/backend/v1/viabilidade/duplicar-cenario', (e) => {
   novoCenario.set('descricao', `Duplicado a partir de "${cenarioOrigem.getString('nome')}"`)
   novoCenario.set('is_base', false)
   novoCenario.set('schema_version', cenarioOrigem.getInt('schema_version') || 2)
-  novoCenario.set('premissas', cenarioOrigem.get('premissas'))
+  try {
+    const rawOrigem = cenarioOrigem.getString('premissas')
+    novoCenario.set('premissas', rawOrigem ? JSON.parse(rawOrigem) : {})
+  } catch (_) {
+    novoCenario.set('premissas', cenarioOrigem.get('premissas'))
+  }
   novoCenario.set('is_stale', true)
 
   e.app.save(novoCenario)
@@ -367,7 +372,24 @@ routerAdd('POST', '/backend/v1/viabilidade/simular', (e) => {
     }
   }
 
-  const premissas = cenario.get('premissas')
+  let premissas = reqData.premissas
+  if (!premissas || typeof premissas !== 'object') {
+    try {
+      const raw = cenario.getString('premissas')
+      premissas = raw ? JSON.parse(raw) : null
+    } catch (_) {
+      premissas = null
+    }
+  }
+  if (!premissas || typeof premissas !== 'object') {
+    premissas = {}
+  } else if (reqData.premissas && typeof reqData.premissas === 'object') {
+    try {
+      cenario.set('premissas', premissas)
+      e.app.save(cenario)
+    } catch (_) {}
+  }
+
   const horizonte = estudo.getInt('horizonte_meses') || 36
   const mesInicial = estudo.getString('mes_inicial') || '2025-01'
 
