@@ -189,29 +189,36 @@ routerAdd('DELETE', '/backend/v1/admin/usuarios/{id}', (e) => {
     return e.json(400, { error: 'Não é permitido excluir outro usuário Administrador Master.' })
   }
 
-  // Contar vínculos obrigatórios usando parâmetros de filtro seguros
+  // Contar vínculos obrigatórios usando findRecordsByFilter com parâmetros seguros
   let totalEstudos = 0
   let totalSimulacoes = 0
   let totalEmpresas = 0
 
   try {
-    totalEstudos = e.app.countRecords('estudos', 'criador = {:userId}', { userId: userId })
-  } catch (errEst) {
-    console.error('Erro ao contar estudos:', errEst)
-  }
-
-  try {
-    totalSimulacoes = e.app.countRecords('simulacoes', 'executado_por = {:userId}', {
+    const recEstudos = e.app.findRecordsByFilter('estudos', 'criador = {:userId}', '', 0, 0, {
       userId: userId,
     })
-  } catch (errSim) {
-    console.error('Erro ao contar simulacoes:', errSim)
-  }
+    totalEstudos = Array.isArray(recEstudos) ? recEstudos.length : 0
 
-  try {
-    totalEmpresas = e.app.countRecords('empresas', 'criador = {:userId}', { userId: userId })
-  } catch (errEmp) {
-    console.error('Erro ao contar empresas:', errEmp)
+    const recSimulacoes = e.app.findRecordsByFilter(
+      'simulacoes',
+      'executado_por = {:userId}',
+      '',
+      0,
+      0,
+      { userId: userId },
+    )
+    totalSimulacoes = Array.isArray(recSimulacoes) ? recSimulacoes.length : 0
+
+    const recEmpresas = e.app.findRecordsByFilter('empresas', 'criador = {:userId}', '', 0, 0, {
+      userId: userId,
+    })
+    totalEmpresas = Array.isArray(recEmpresas) ? recEmpresas.length : 0
+  } catch (errContagem) {
+    console.error('Erro ao verificar histórico do usuário:', errContagem)
+    return e.json(500, {
+      error: 'Não foi possível verificar o histórico do usuário',
+    })
   }
 
   const totalHistorico = totalEstudos + totalSimulacoes + totalEmpresas
