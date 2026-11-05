@@ -393,8 +393,9 @@ routerAdd('POST', '/backend/v1/viabilidade/simular', (e) => {
   const horizonte = estudo.getInt('horizonte_meses') || 36
   const mesInicial = estudo.getString('mes_inicial') || '2025-01'
 
-  // Carrega motor determinístico fonte única (arquivo real: viabilidade_core.pb.js)
-  const core = require(`${__hooks}/viabilidade_core.pb.js`)
+  // Carrega motor determinístico fonte única. Nome local: pocketbase/hooks/viabilidade_core.pb.js;
+  // no servidor o sufixo ".pb.js" do nome local vira "_pb.pb.js" e o nome publicado é viabilidade_core_pb.pb.js.
+  const core = require(`${__hooks}/viabilidade_core_pb.pb.js`)
 
   // Validação estrita antes do cálculo: se houver pendências bloqueantes, retorna 422
   const errosValidacao = core.vb_validarPremissas(premissas, horizonte)
@@ -467,7 +468,7 @@ routerAdd('GET', '/backend/v1/viabilidade/autoteste', (e) => {
   }
 
   try {
-    const core = require(`${__hooks}/viabilidade_core.pb.js`)
+    const core = require(`${__hooks}/viabilidade_core_pb.pb.js`)
 
     const casos = []
 

@@ -29,19 +29,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "is_master",
@@ -90,24 +85,17 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
-      "indexes": [
-        "CREATE INDEX idx_empresas_criador ON empresas (criador)"
-      ]
+      "indexes": ["CREATE INDEX idx_empresas_criador ON empresas (criador)"]
     },
     {
       "name": "empresa_membros",
@@ -139,30 +127,21 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": [
-            "admin_master",
-            "analista",
-            "viewer"
-          ]
+          "selectValues": ["admin_master", "analista", "viewer"]
         },
         {
           "name": "created",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [
@@ -211,12 +190,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": [
-            "operando",
-            "reforma/expansao",
-            "novo projeto",
-            "combinado"
-          ]
+          "selectValues": ["operando", "reforma/expansao", "novo projeto", "combinado"]
         },
         {
           "name": "mes_inicial",
@@ -248,19 +222,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [
@@ -327,19 +296,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "is_exemplo",
@@ -348,9 +312,7 @@
           "system": false
         }
       ],
-      "indexes": [
-        "CREATE INDEX idx_cenarios_estudo ON cenarios (estudo)"
-      ]
+      "indexes": ["CREATE INDEX idx_cenarios_estudo ON cenarios (estudo)"]
     },
     {
       "name": "simulacoes",
@@ -381,11 +343,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": [
-            "sucesso",
-            "falha",
-            "em_processamento"
-          ]
+          "selectValues": ["sucesso", "falha", "em_processamento"]
         },
         {
           "name": "erro_mensagem",
@@ -423,19 +381,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "motor_versao",
@@ -444,9 +397,7 @@
           "system": false
         }
       ],
-      "indexes": [
-        "CREATE INDEX idx_simulacoes_cenario ON simulacoes (cenario)"
-      ]
+      "indexes": ["CREATE INDEX idx_simulacoes_cenario ON simulacoes (cenario)"]
     }
   ]
 }
