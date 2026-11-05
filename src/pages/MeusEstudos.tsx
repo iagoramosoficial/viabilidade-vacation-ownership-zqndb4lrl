@@ -141,17 +141,58 @@ export const MeusEstudos: React.FC = () => {
         criador: user.id,
       })
 
-      // 2. Create Base scenario with empty premissas (no pre-filled numbers)
+      // 2. Create Base scenario with empty premissas (no pre-filled numbers;
+      // campos ausentes ficam null = "não informado", que o core trata como pendência)
       const premissasVazias = {
         salas: [],
         produtos: [],
         mix_por_sala: [],
-        condicoes_pagamento: {},
-        cancelamentos_inadimplencia: {},
+        condicoes_pagamento: {
+          multipropriedade: {
+            perc_entrada: null,
+            parcelas_entrada: null,
+            mes_primeira_saldo: null,
+            parcelas_saldo: null,
+          },
+          timeshare: {
+            perc_entrada: null,
+            parcelas_entrada: null,
+            mes_primeira_saldo: null,
+            parcelas_saldo: null,
+          },
+        },
+        cancelamentos_inadimplencia: {
+          multipropriedade: {
+            cancelamento: {
+              taxa: null,
+              mes_medio: null,
+              taxa_devolucao: null,
+              prazo_devolucao: null,
+            },
+            inadimplencia: {
+              taxa: null,
+              parcela_recuperavel: null,
+              prazo_recuperacao: null,
+            },
+          },
+          timeshare: {
+            cancelamento: {
+              taxa: null,
+              mes_medio: null,
+              taxa_devolucao: null,
+              prazo_devolucao: null,
+            },
+            inadimplencia: {
+              taxa: null,
+              parcela_recuperavel: null,
+              prazo_recuperacao: null,
+            },
+          },
+        },
         remuneracoes: [],
         custos_despesas: [],
         investimentos: [],
-        caixa_inicial: {},
+        caixa_inicial: { comercializadora: null, empreendimento: null },
       }
 
       const cenarioBase = await pb.collection('cenarios').create({

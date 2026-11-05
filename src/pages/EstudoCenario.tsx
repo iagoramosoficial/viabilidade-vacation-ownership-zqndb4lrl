@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { CampoNumero, CampoPercentual } from '@/components/CamposNumero'
 import { EditorAjustesMensais } from '@/components/EditorAjustesMensais'
 import { TelaResultados } from '@/components/TelaResultados'
 import { vb_validarPremissas } from '@/lib/pocketbase/viabilidade_core.mjs'
@@ -113,30 +114,48 @@ export const EstudoCenario: React.FC = () => {
 
       const rawP = (cen.premissas || {}) as Partial<PremissasEstudo>
 
+      // Heurística para cenários antigos: a normalização anterior gravava 0 em
+      // TODA a estrutura quando o campo estava ausente. Esse padrão ("estrutura
+      // inteira zerada") é tratado como não informado (null). Um 0 isolado em
+      // um campo específico é zero legítimo digitado e continua sendo exibido.
+      const estruturaZerada = (obj?: object | null): boolean =>
+        Boolean(obj) &&
+        Object.keys(obj as object).length > 0 &&
+        Object.values(obj as Record<string, unknown>).every((v) => v === 0)
+
       const normalizarCondicao = (
-        cond?: Partial<CondicaoPagamentoModalidade>,
-      ): CondicaoPagamentoModalidade => ({
-        perc_entrada: cond?.perc_entrada ?? 0,
-        parcelas_entrada: cond?.parcelas_entrada ?? 0,
-        mes_primeira_saldo: cond?.mes_primeira_saldo ?? 0,
-        parcelas_saldo: cond?.parcelas_saldo ?? 0,
-      })
+        cond?: Partial<CondicaoPagamentoModalidade> | null,
+      ): CondicaoPagamentoModalidade => {
+        const zerada = estruturaZerada(cond)
+        return {
+          perc_entrada: zerada ? null : (cond?.perc_entrada ?? null),
+          parcelas_entrada: zerada ? null : (cond?.parcelas_entrada ?? null),
+          mes_primeira_saldo: zerada ? null : (cond?.mes_primeira_saldo ?? null),
+          parcelas_saldo: zerada ? null : (cond?.parcelas_saldo ?? null),
+        }
+      }
 
       const normalizarCancInad = (
-        ci?: Partial<RegrasCancelamentoInadimplencia>,
-      ): RegrasCancelamentoInadimplencia => ({
-        cancelamento: {
-          taxa: ci?.cancelamento?.taxa ?? 0,
-          mes_medio: ci?.cancelamento?.mes_medio ?? 0,
-          taxa_devolucao: ci?.cancelamento?.taxa_devolucao ?? 0,
-          prazo_devolucao: ci?.cancelamento?.prazo_devolucao ?? 0,
-        },
-        inadimplencia: {
-          taxa: ci?.inadimplencia?.taxa ?? 0,
-          parcela_recuperavel: ci?.inadimplencia?.parcela_recuperavel ?? 0,
-          prazo_recuperacao: ci?.inadimplencia?.prazo_recuperacao ?? 0,
-        },
-      })
+        ci?: Partial<RegrasCancelamentoInadimplencia> | null,
+      ): RegrasCancelamentoInadimplencia => {
+        const zeradoCanc = estruturaZerada(ci?.cancelamento)
+        const zeradoInad = estruturaZerada(ci?.inadimplencia)
+        return {
+          cancelamento: {
+            taxa: zeradoCanc ? null : (ci?.cancelamento?.taxa ?? null),
+            mes_medio: zeradoCanc ? null : (ci?.cancelamento?.mes_medio ?? null),
+            taxa_devolucao: zeradoCanc ? null : (ci?.cancelamento?.taxa_devolucao ?? null),
+            prazo_devolucao: zeradoCanc ? null : (ci?.cancelamento?.prazo_devolucao ?? null),
+          },
+          inadimplencia: {
+            taxa: zeradoInad ? null : (ci?.inadimplencia?.taxa ?? null),
+            parcela_recuperavel: zeradoInad
+              ? null
+              : (ci?.inadimplencia?.parcela_recuperavel ?? null),
+            prazo_recuperacao: zeradoInad ? null : (ci?.inadimplencia?.prazo_recuperacao ?? null),
+          },
+        }
+      }
 
       const p: PremissasEstudo = {
         salas: Array.isArray(rawP.salas) ? rawP.salas : [],
@@ -153,10 +172,12 @@ export const EstudoCenario: React.FC = () => {
         remuneracoes: Array.isArray(rawP.remuneracoes) ? rawP.remuneracoes : [],
         custos_despesas: Array.isArray(rawP.custos_despesas) ? rawP.custos_despesas : [],
         investimentos: Array.isArray(rawP.investimentos) ? rawP.investimentos : [],
-        caixa_inicial: {
-          comercializadora: rawP.caixa_inicial?.comercializadora ?? 0,
-          empreendimento: rawP.caixa_inicial?.empreendimento ?? 0,
-        },
+        caixa_inicial: estruturaZerada(rawP.caixa_inicial)
+          ? { comercializadora: null, empreendimento: null }
+          : {
+              comercializadora: rawP.caixa_inicial?.comercializadora ?? null,
+              empreendimento: rawP.caixa_inicial?.empreendimento ?? null,
+            },
       }
       setPremissas(p)
 
@@ -396,19 +417,19 @@ export const EstudoCenario: React.FC = () => {
     const novaSala: SalaVendas = {
       id: novaId,
       nome: `Sala de Vendas ${premissas.salas.length + 1}`,
-      capacidade_mensal: { base: 100, ajustes: {} },
+      capacidade_mensal: { base: null, ajustes: {} },
       pontos: [
         {
           id: 'pnt_' + Math.random().toString(36).substring(2, 7),
           sala_id: novaId,
           nome: 'Ponto de Captação Principal',
           etapa_entrada: 'comparecidos',
-          volume_entrada: { base: 80, ajustes: {} },
-          taxa_qualificados: { base: 1.0, ajustes: {} },
-          taxa_convidados: { base: 1.0, ajustes: {} },
-          taxa_comparecimento: { base: 1.0, ajustes: {} },
-          taxa_conversao_venda: { base: 0.2, ajustes: {} },
-          custo_transporte_unitario: { base: 0, ajustes: {} },
+          volume_entrada: { base: null, ajustes: {} },
+          taxa_qualificados: { base: null, ajustes: {} },
+          taxa_convidados: { base: null, ajustes: {} },
+          taxa_comparecimento: { base: null, ajustes: {} },
+          taxa_conversao_venda: { base: null, ajustes: {} },
+          custo_transporte_unitario: { base: null, ajustes: {} },
         },
       ],
     }
@@ -448,12 +469,12 @@ export const EstudoCenario: React.FC = () => {
       sala_id: salaId,
       nome: 'Novo Ponto de Captação',
       etapa_entrada: 'comparecidos',
-      volume_entrada: { base: 50, ajustes: {} },
-      taxa_qualificados: { base: 1.0, ajustes: {} },
-      taxa_convidados: { base: 1.0, ajustes: {} },
-      taxa_comparecimento: { base: 1.0, ajustes: {} },
-      taxa_conversao_venda: { base: 0.18, ajustes: {} },
-      custo_transporte_unitario: { base: 0, ajustes: {} },
+      volume_entrada: { base: null, ajustes: {} },
+      taxa_qualificados: { base: null, ajustes: {} },
+      taxa_convidados: { base: null, ajustes: {} },
+      taxa_comparecimento: { base: null, ajustes: {} },
+      taxa_conversao_venda: { base: null, ajustes: {} },
+      custo_transporte_unitario: { base: null, ajustes: {} },
     }
 
     const salasNovas = premissas.salas.map((s) => {
@@ -482,8 +503,8 @@ export const EstudoCenario: React.FC = () => {
       id: novoProdId,
       nome: 'Novo Produto / Cota',
       modalidade: 'multipropriedade',
-      preco: { base: 40000, ajustes: {} },
-      estoque_disponivel: 100,
+      preco: { base: null, ajustes: {} },
+      estoque_disponivel: null,
     }
 
     const produtosNovos = [...premissas.produtos, novoProduto]
@@ -785,13 +806,12 @@ export const EstudoCenario: React.FC = () => {
                         <Label className="text-xs text-muted-foreground">
                           Capacidade Base/mês:
                         </Label>
-                        <Input
-                          type="number"
+                        <CampoNumero
                           className="h-8 w-24 text-xs font-mono"
                           value={sala.capacidade_mensal.base}
-                          onChange={(e) => {
+                          onChange={(valor) => {
                             const salasNovas = [...premissas.salas]
-                            salasNovas[salaIdx].capacidade_mensal.base = Number(e.target.value)
+                            salasNovas[salaIdx].capacidade_mensal.base = valor
                             atualizarPremissas({ ...premissas, salas: salasNovas })
                           }}
                         />
@@ -887,15 +907,12 @@ export const EstudoCenario: React.FC = () => {
                             <div className="space-y-1">
                               <Label className="text-[11px]">Volume Entrada Base</Label>
                               <div className="flex items-center gap-1">
-                                <Input
-                                  type="number"
+                                <CampoNumero
                                   className="h-8 text-xs font-mono"
                                   value={ponto.volume_entrada.base}
-                                  onChange={(e) => {
+                                  onChange={(valor) => {
                                     const salasNovas = [...premissas.salas]
-                                    salasNovas[salaIdx].pontos[pIdx].volume_entrada.base = Number(
-                                      e.target.value,
-                                    )
+                                    salasNovas[salaIdx].pontos[pIdx].volume_entrada.base = valor
                                     atualizarPremissas({ ...premissas, salas: salasNovas })
                                   }}
                                 />
@@ -918,16 +935,14 @@ export const EstudoCenario: React.FC = () => {
                                 <Label className="text-[11px] truncate">
                                   Taxa Qualificados (denom: Abord.)
                                 </Label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
+                                <CampoPercentual
                                   className="h-8 text-xs font-mono"
-                                  placeholder="1.0"
-                                  value={ponto.taxa_qualificados?.base ?? 1.0}
-                                  onChange={(e) => {
+                                  placeholder="100"
+                                  value={ponto.taxa_qualificados?.base}
+                                  onChange={(valor) => {
                                     const salasNovas = [...premissas.salas]
                                     salasNovas[salaIdx].pontos[pIdx].taxa_qualificados = {
-                                      base: Number(e.target.value),
+                                      base: valor,
                                       ajustes: ponto.taxa_qualificados?.ajustes,
                                     }
                                     atualizarPremissas({ ...premissas, salas: salasNovas })
@@ -942,16 +957,14 @@ export const EstudoCenario: React.FC = () => {
                                 <Label className="text-[11px] truncate">
                                   Taxa Agendados (denom: Qual.)
                                 </Label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
+                                <CampoPercentual
                                   className="h-8 text-xs font-mono"
-                                  placeholder="1.0"
-                                  value={ponto.taxa_convidados?.base ?? 1.0}
-                                  onChange={(e) => {
+                                  placeholder="100"
+                                  value={ponto.taxa_convidados?.base}
+                                  onChange={(valor) => {
                                     const salasNovas = [...premissas.salas]
                                     salasNovas[salaIdx].pontos[pIdx].taxa_convidados = {
-                                      base: Number(e.target.value),
+                                      base: valor,
                                       ajustes: ponto.taxa_convidados?.ajustes,
                                     }
                                     atualizarPremissas({ ...premissas, salas: salasNovas })
@@ -965,16 +978,14 @@ export const EstudoCenario: React.FC = () => {
                                 <Label className="text-[11px] truncate">
                                   Taxa Comparecimento (denom: Conv.)
                                 </Label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
+                                <CampoPercentual
                                   className="h-8 text-xs font-mono"
-                                  placeholder="1.0"
-                                  value={ponto.taxa_comparecimento?.base ?? 1.0}
-                                  onChange={(e) => {
+                                  placeholder="100"
+                                  value={ponto.taxa_comparecimento?.base}
+                                  onChange={(valor) => {
                                     const salasNovas = [...premissas.salas]
                                     salasNovas[salaIdx].pontos[pIdx].taxa_comparecimento = {
-                                      base: Number(e.target.value),
+                                      base: valor,
                                       ajustes: ponto.taxa_comparecimento?.ajustes,
                                     }
                                     atualizarPremissas({ ...premissas, salas: salasNovas })
@@ -988,15 +999,13 @@ export const EstudoCenario: React.FC = () => {
                                 Conversão Venda (denom: Efetivos)
                               </Label>
                               <div className="flex items-center gap-1">
-                                <Input
-                                  type="number"
-                                  step="0.01"
+                                <CampoPercentual
                                   className="h-8 text-xs font-mono"
                                   value={ponto.taxa_conversao_venda.base}
-                                  onChange={(e) => {
+                                  onChange={(valor) => {
                                     const salasNovas = [...premissas.salas]
                                     salasNovas[salaIdx].pontos[pIdx].taxa_conversao_venda.base =
-                                      Number(e.target.value)
+                                      valor
                                     atualizarPremissas({ ...premissas, salas: salasNovas })
                                   }}
                                 />
@@ -1017,14 +1026,13 @@ export const EstudoCenario: React.FC = () => {
 
                             <div className="space-y-1">
                               <Label className="text-[11px]">Custo Transporte Unit. (R$)</Label>
-                              <Input
-                                type="number"
+                              <CampoNumero
                                 className="h-8 text-xs font-mono"
                                 value={ponto.custo_transporte_unitario.base}
-                                onChange={(e) => {
+                                onChange={(valor) => {
                                   const salasNovas = [...premissas.salas]
                                   salasNovas[salaIdx].pontos[pIdx].custo_transporte_unitario.base =
-                                    Number(e.target.value)
+                                    valor
                                   atualizarPremissas({ ...premissas, salas: salasNovas })
                                 }}
                               />
@@ -1117,13 +1125,12 @@ export const EstudoCenario: React.FC = () => {
 
                       <div>
                         <Label className="text-[11px]">Estoque Disponível (Cotas)</Label>
-                        <Input
-                          type="number"
+                        <CampoNumero
                           className="h-8 text-xs font-mono"
                           value={prod.estoque_disponivel}
-                          onChange={(e) => {
+                          onChange={(valor) => {
                             const prodsNovos = [...premissas.produtos]
-                            prodsNovos[prodIdx].estoque_disponivel = Number(e.target.value)
+                            prodsNovos[prodIdx].estoque_disponivel = valor
                             atualizarPremissas({ ...premissas, produtos: prodsNovos })
                           }}
                         />
@@ -1132,13 +1139,12 @@ export const EstudoCenario: React.FC = () => {
                       <div className="col-span-2">
                         <Label className="text-[11px]">Preço Unitário Base (R$)</Label>
                         <div className="flex items-center gap-1.5">
-                          <Input
-                            type="number"
+                          <CampoNumero
                             className="h-8 text-xs font-mono"
                             value={prod.preco.base}
-                            onChange={(e) => {
+                            onChange={(valor) => {
                               const prodsNovos = [...premissas.produtos]
-                              prodsNovos[prodIdx].preco.base = Number(e.target.value)
+                              prodsNovos[prodIdx].preco.base = valor
                               atualizarPremissas({ ...premissas, produtos: prodsNovos })
                             }}
                           />
@@ -1195,49 +1201,42 @@ export const EstudoCenario: React.FC = () => {
                               className="p-2 border rounded-md flex items-center justify-between text-xs bg-background"
                             >
                               <span className="truncate max-w-[150px]">{prod.nome}</span>
-                              <div className="flex items-center gap-1">
-                                <Input
-                                  type="number"
-                                  step="0.05"
-                                  className="h-7 w-20 text-xs font-mono"
-                                  value={percBase}
-                                  onChange={(e) => {
-                                    const novoPerc = Number(e.target.value)
-                                    const mixNovos = premissas.mix_por_sala.map((ms) => {
-                                      if (ms.sala_id === sala.id) {
-                                        const exist = ms.produtos.find(
-                                          (p) => p.produto_id === prod.id,
+                              <CampoPercentual
+                                step="5"
+                                className="h-7 w-20 text-xs font-mono"
+                                value={prodMix?.percentual.base}
+                                onChange={(novoPerc) => {
+                                  const mixNovos = premissas.mix_por_sala.map((ms) => {
+                                    if (ms.sala_id === sala.id) {
+                                      const exist = ms.produtos.find(
+                                        (p) => p.produto_id === prod.id,
+                                      )
+                                      let prodsAtualizados
+                                      if (exist) {
+                                        prodsAtualizados = ms.produtos.map((p) =>
+                                          p.produto_id === prod.id
+                                            ? {
+                                                ...p,
+                                                percentual: { ...p.percentual, base: novoPerc },
+                                              }
+                                            : p,
                                         )
-                                        let prodsAtualizados
-                                        if (exist) {
-                                          prodsAtualizados = ms.produtos.map((p) =>
-                                            p.produto_id === prod.id
-                                              ? {
-                                                  ...p,
-                                                  percentual: { ...p.percentual, base: novoPerc },
-                                                }
-                                              : p,
-                                          )
-                                        } else {
-                                          prodsAtualizados = [
-                                            ...ms.produtos,
-                                            {
-                                              produto_id: prod.id,
-                                              percentual: { base: novoPerc, ajustes: {} },
-                                            },
-                                          ]
-                                        }
-                                        return { ...ms, produtos: prodsAtualizados }
+                                      } else {
+                                        prodsAtualizados = [
+                                          ...ms.produtos,
+                                          {
+                                            produto_id: prod.id,
+                                            percentual: { base: novoPerc ?? 0, ajustes: {} },
+                                          },
+                                        ]
                                       }
-                                      return ms
-                                    })
-                                    atualizarPremissas({ ...premissas, mix_por_sala: mixNovos })
-                                  }}
-                                />
-                                <span className="text-[10px] text-muted-foreground">
-                                  ({(percBase * 100).toFixed(0)}%)
-                                </span>
-                              </div>
+                                      return { ...ms, produtos: prodsAtualizados }
+                                    }
+                                    return ms
+                                  })
+                                  atualizarPremissas({ ...premissas, mix_por_sala: mixNovos })
+                                }}
+                              />
                             </div>
                           )
                         })}
@@ -1276,41 +1275,38 @@ export const EstudoCenario: React.FC = () => {
                 <div className="space-y-3 text-xs">
                   <div>
                     <Label className="text-[11px]">Entrada Percentual (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
+                    <CampoPercentual
                       className="h-8 text-xs font-mono"
                       value={premissas.condicoes_pagamento.multipropriedade.perc_entrada}
-                      onChange={(e) => {
+                      onChange={(valor) => {
                         atualizarPremissas({
                           ...premissas,
                           condicoes_pagamento: {
                             ...premissas.condicoes_pagamento,
                             multipropriedade: {
                               ...premissas.condicoes_pagamento.multipropriedade,
-                              perc_entrada: Number(e.target.value),
+                              perc_entrada: valor,
                             },
                           },
                         })
                       }}
                     />
-                    <span className="text-[10px] text-muted-foreground">Ex: 0.15 para 15%</span>
+                    <span className="text-[10px] text-muted-foreground">Ex: 15 para 15%</span>
                   </div>
 
                   <div>
                     <Label className="text-[11px]">Parcelas da Entrada (qtd meses)</Label>
-                    <Input
-                      type="number"
+                    <CampoNumero
                       className="h-8 text-xs font-mono"
                       value={premissas.condicoes_pagamento.multipropriedade.parcelas_entrada}
-                      onChange={(e) => {
+                      onChange={(valor) => {
                         atualizarPremissas({
                           ...premissas,
                           condicoes_pagamento: {
                             ...premissas.condicoes_pagamento,
                             multipropriedade: {
                               ...premissas.condicoes_pagamento.multipropriedade,
-                              parcelas_entrada: Number(e.target.value),
+                              parcelas_entrada: valor,
                             },
                           },
                         })
@@ -1320,18 +1316,17 @@ export const EstudoCenario: React.FC = () => {
 
                   <div>
                     <Label className="text-[11px]">Mês Relativo da 1ª Parcela do Saldo</Label>
-                    <Input
-                      type="number"
+                    <CampoNumero
                       className="h-8 text-xs font-mono"
                       value={premissas.condicoes_pagamento.multipropriedade.mes_primeira_saldo}
-                      onChange={(e) => {
+                      onChange={(valor) => {
                         atualizarPremissas({
                           ...premissas,
                           condicoes_pagamento: {
                             ...premissas.condicoes_pagamento,
                             multipropriedade: {
                               ...premissas.condicoes_pagamento.multipropriedade,
-                              mes_primeira_saldo: Number(e.target.value),
+                              mes_primeira_saldo: valor,
                             },
                           },
                         })
@@ -1344,18 +1339,17 @@ export const EstudoCenario: React.FC = () => {
 
                   <div>
                     <Label className="text-[11px]">Quantidade de Parcelas do Saldo</Label>
-                    <Input
-                      type="number"
+                    <CampoNumero
                       className="h-8 text-xs font-mono"
                       value={premissas.condicoes_pagamento.multipropriedade.parcelas_saldo}
-                      onChange={(e) => {
+                      onChange={(valor) => {
                         atualizarPremissas({
                           ...premissas,
                           condicoes_pagamento: {
                             ...premissas.condicoes_pagamento,
                             multipropriedade: {
                               ...premissas.condicoes_pagamento.multipropriedade,
-                              parcelas_saldo: Number(e.target.value),
+                              parcelas_saldo: valor,
                             },
                           },
                         })
@@ -1378,19 +1372,17 @@ export const EstudoCenario: React.FC = () => {
                 <div className="space-y-3 text-xs">
                   <div>
                     <Label className="text-[11px]">Entrada Percentual (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
+                    <CampoPercentual
                       className="h-8 text-xs font-mono"
                       value={premissas.condicoes_pagamento.timeshare.perc_entrada}
-                      onChange={(e) => {
+                      onChange={(valor) => {
                         atualizarPremissas({
                           ...premissas,
                           condicoes_pagamento: {
                             ...premissas.condicoes_pagamento,
                             timeshare: {
                               ...premissas.condicoes_pagamento.timeshare,
-                              perc_entrada: Number(e.target.value),
+                              perc_entrada: valor,
                             },
                           },
                         })
@@ -1400,18 +1392,17 @@ export const EstudoCenario: React.FC = () => {
 
                   <div>
                     <Label className="text-[11px]">Parcelas da Entrada (qtd meses)</Label>
-                    <Input
-                      type="number"
+                    <CampoNumero
                       className="h-8 text-xs font-mono"
                       value={premissas.condicoes_pagamento.timeshare.parcelas_entrada}
-                      onChange={(e) => {
+                      onChange={(valor) => {
                         atualizarPremissas({
                           ...premissas,
                           condicoes_pagamento: {
                             ...premissas.condicoes_pagamento,
                             timeshare: {
                               ...premissas.condicoes_pagamento.timeshare,
-                              parcelas_entrada: Number(e.target.value),
+                              parcelas_entrada: valor,
                             },
                           },
                         })
@@ -1421,18 +1412,17 @@ export const EstudoCenario: React.FC = () => {
 
                   <div>
                     <Label className="text-[11px]">Mês Relativo da 1ª Parcela do Saldo</Label>
-                    <Input
-                      type="number"
+                    <CampoNumero
                       className="h-8 text-xs font-mono"
                       value={premissas.condicoes_pagamento.timeshare.mes_primeira_saldo}
-                      onChange={(e) => {
+                      onChange={(valor) => {
                         atualizarPremissas({
                           ...premissas,
                           condicoes_pagamento: {
                             ...premissas.condicoes_pagamento,
                             timeshare: {
                               ...premissas.condicoes_pagamento.timeshare,
-                              mes_primeira_saldo: Number(e.target.value),
+                              mes_primeira_saldo: valor,
                             },
                           },
                         })
@@ -1442,18 +1432,17 @@ export const EstudoCenario: React.FC = () => {
 
                   <div>
                     <Label className="text-[11px]">Quantidade de Parcelas do Saldo</Label>
-                    <Input
-                      type="number"
+                    <CampoNumero
                       className="h-8 text-xs font-mono"
                       value={premissas.condicoes_pagamento.timeshare.parcelas_saldo}
-                      onChange={(e) => {
+                      onChange={(valor) => {
                         atualizarPremissas({
                           ...premissas,
                           condicoes_pagamento: {
                             ...premissas.condicoes_pagamento,
                             timeshare: {
                               ...premissas.condicoes_pagamento.timeshare,
-                              parcelas_saldo: Number(e.target.value),
+                              parcelas_saldo: valor,
                             },
                           },
                         })
@@ -1501,31 +1490,28 @@ export const EstudoCenario: React.FC = () => {
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <Label className="text-[10px]">Taxa de Cancelamento</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
+                            <CampoPercentual
                               className="h-8 text-xs font-mono"
                               value={conf.cancelamento.taxa}
-                              onChange={(e) => {
+                              onChange={(valor) => {
                                 const next = { ...premissas.cancelamentos_inadimplencia }
-                                next[mod].cancelamento.taxa = Number(e.target.value)
+                                next[mod].cancelamento.taxa = valor
                                 atualizarPremissas({
                                   ...premissas,
                                   cancelamentos_inadimplencia: next,
                                 })
                               }}
                             />
-                            <span className="text-[10px] text-muted-foreground">Ex: 0.08 (8%)</span>
+                            <span className="text-[10px] text-muted-foreground">Ex: 8 (8%)</span>
                           </div>
                           <div>
                             <Label className="text-[10px]">Mês Médio Cancel.</Label>
-                            <Input
-                              type="number"
+                            <CampoNumero
                               className="h-8 text-xs font-mono"
                               value={conf.cancelamento.mes_medio}
-                              onChange={(e) => {
+                              onChange={(valor) => {
                                 const next = { ...premissas.cancelamentos_inadimplencia }
-                                next[mod].cancelamento.mes_medio = Number(e.target.value)
+                                next[mod].cancelamento.mes_medio = valor
                                 atualizarPremissas({
                                   ...premissas,
                                   cancelamentos_inadimplencia: next,
@@ -1535,33 +1521,28 @@ export const EstudoCenario: React.FC = () => {
                           </div>
                           <div>
                             <Label className="text-[10px]">Devolução s/ Recebido</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
+                            <CampoPercentual
                               className="h-8 text-xs font-mono"
                               value={conf.cancelamento.taxa_devolucao}
-                              onChange={(e) => {
+                              onChange={(valor) => {
                                 const next = { ...premissas.cancelamentos_inadimplencia }
-                                next[mod].cancelamento.taxa_devolucao = Number(e.target.value)
+                                next[mod].cancelamento.taxa_devolucao = valor
                                 atualizarPremissas({
                                   ...premissas,
                                   cancelamentos_inadimplencia: next,
                                 })
                               }}
                             />
-                            <span className="text-[10px] text-muted-foreground">
-                              Ex: 0.70 (70%)
-                            </span>
+                            <span className="text-[10px] text-muted-foreground">Ex: 70 (70%)</span>
                           </div>
                           <div>
                             <Label className="text-[10px]">Prazo Devolução (meses)</Label>
-                            <Input
-                              type="number"
+                            <CampoNumero
                               className="h-8 text-xs font-mono"
                               value={conf.cancelamento.prazo_devolucao}
-                              onChange={(e) => {
+                              onChange={(valor) => {
                                 const next = { ...premissas.cancelamentos_inadimplencia }
-                                next[mod].cancelamento.prazo_devolucao = Number(e.target.value)
+                                next[mod].cancelamento.prazo_devolucao = valor
                                 atualizarPremissas({
                                   ...premissas,
                                   cancelamentos_inadimplencia: next,
@@ -1579,14 +1560,12 @@ export const EstudoCenario: React.FC = () => {
                         <div className="grid grid-cols-3 gap-2">
                           <div>
                             <Label className="text-[10px]">Taxa Inadimplência</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
+                            <CampoPercentual
                               className="h-8 text-xs font-mono"
                               value={conf.inadimplencia.taxa}
-                              onChange={(e) => {
+                              onChange={(valor) => {
                                 const next = { ...premissas.cancelamentos_inadimplencia }
-                                next[mod].inadimplencia.taxa = Number(e.target.value)
+                                next[mod].inadimplencia.taxa = valor
                                 atualizarPremissas({
                                   ...premissas,
                                   cancelamentos_inadimplencia: next,
@@ -1596,14 +1575,12 @@ export const EstudoCenario: React.FC = () => {
                           </div>
                           <div>
                             <Label className="text-[10px]">Parcela Recuperável</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
+                            <CampoPercentual
                               className="h-8 text-xs font-mono"
                               value={conf.inadimplencia.parcela_recuperavel}
-                              onChange={(e) => {
+                              onChange={(valor) => {
                                 const next = { ...premissas.cancelamentos_inadimplencia }
-                                next[mod].inadimplencia.parcela_recuperavel = Number(e.target.value)
+                                next[mod].inadimplencia.parcela_recuperavel = valor
                                 atualizarPremissas({
                                   ...premissas,
                                   cancelamentos_inadimplencia: next,
@@ -1613,13 +1590,12 @@ export const EstudoCenario: React.FC = () => {
                           </div>
                           <div>
                             <Label className="text-[10px]">Prazo Recup. (meses)</Label>
-                            <Input
-                              type="number"
+                            <CampoNumero
                               className="h-8 text-xs font-mono"
                               value={conf.inadimplencia.prazo_recuperacao}
-                              onChange={(e) => {
+                              onChange={(valor) => {
                                 const next = { ...premissas.cancelamentos_inadimplencia }
-                                next[mod].inadimplencia.prazo_recuperacao = Number(e.target.value)
+                                next[mod].inadimplencia.prazo_recuperacao = valor
                                 atualizarPremissas({
                                   ...premissas,
                                   cancelamentos_inadimplencia: next,
@@ -1660,7 +1636,7 @@ export const EstudoCenario: React.FC = () => {
                       id: 'rem_' + Math.random().toString(36).substring(2, 7),
                       nome: 'Novo Componente de Remuneração',
                       tipo: 'perc_vgv' as TipoRemuneracao,
-                      valor: { base: 0.1, ajustes: {} },
+                      valor: { base: null, ajustes: {} },
                       adicional_ou_compensavel: 'adicional' as const,
                     }
                     atualizarPremissas({
@@ -1748,20 +1724,30 @@ export const EstudoCenario: React.FC = () => {
 
                       <div className="col-span-2">
                         <Label className="text-[11px]">
-                          Valor Base ({rem.tipo === 'fixo' ? 'R$' : 'Fração Decimal, ex: 0.12'})
+                          Valor Base ({rem.tipo === 'fixo' ? 'R$' : '%'})
                         </Label>
                         <div className="flex items-center gap-1.5">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            className="h-8 text-xs font-mono"
-                            value={rem.valor.base}
-                            onChange={(e) => {
-                              const rems = [...premissas.remuneracoes]
-                              rems[rIdx].valor.base = Number(e.target.value)
-                              atualizarPremissas({ ...premissas, remuneracoes: rems })
-                            }}
-                          />
+                          {rem.tipo === 'fixo' ? (
+                            <CampoNumero
+                              className="h-8 text-xs font-mono"
+                              value={rem.valor.base}
+                              onChange={(valor) => {
+                                const rems = [...premissas.remuneracoes]
+                                rems[rIdx].valor.base = valor
+                                atualizarPremissas({ ...premissas, remuneracoes: rems })
+                              }}
+                            />
+                          ) : (
+                            <CampoPercentual
+                              className="h-8 text-xs font-mono"
+                              value={rem.valor.base}
+                              onChange={(valor) => {
+                                const rems = [...premissas.remuneracoes]
+                                rems[rIdx].valor.base = valor
+                                atualizarPremissas({ ...premissas, remuneracoes: rems })
+                              }}
+                            />
+                          )}
                           <EditorAjustesMensais
                             titulo={`Remuneração: ${rem.nome}`}
                             horizonteMeses={horizonte}
@@ -1804,16 +1790,15 @@ export const EstudoCenario: React.FC = () => {
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
                   <Label className="text-[11px]">Comercializadora</Label>
-                  <Input
-                    type="number"
+                  <CampoNumero
                     className="h-8 text-xs font-mono"
                     value={premissas.caixa_inicial.comercializadora}
-                    onChange={(e) => {
+                    onChange={(valor) => {
                       atualizarPremissas({
                         ...premissas,
                         caixa_inicial: {
                           ...premissas.caixa_inicial,
-                          comercializadora: Number(e.target.value),
+                          comercializadora: valor,
                         },
                       })
                     }}
@@ -1821,16 +1806,15 @@ export const EstudoCenario: React.FC = () => {
                 </div>
                 <div>
                   <Label className="text-[11px]">Empreendimento</Label>
-                  <Input
-                    type="number"
+                  <CampoNumero
                     className="h-8 text-xs font-mono"
                     value={premissas.caixa_inicial.empreendimento}
-                    onChange={(e) => {
+                    onChange={(valor) => {
                       atualizarPremissas({
                         ...premissas,
                         caixa_inicial: {
                           ...premissas.caixa_inicial,
-                          empreendimento: Number(e.target.value),
+                          empreendimento: valor,
                         },
                       })
                     }}
@@ -1851,7 +1835,7 @@ export const EstudoCenario: React.FC = () => {
                       id: 'desp_' + Math.random().toString(36).substring(2, 7),
                       nome: 'Despesa Operacional',
                       tipo: 'fixo' as TipoCustoDespesa,
-                      valor: { base: 10000, ajustes: {} },
+                      valor: { base: null, ajustes: {} },
                       responsavel_economico: 'comercializadora' as ResponsavelEconomico,
                     }
                     atualizarPremissas({
@@ -1942,13 +1926,12 @@ export const EstudoCenario: React.FC = () => {
                       <div className="col-span-2">
                         <Label className="text-[11px]">Valor Base</Label>
                         <div className="flex items-center gap-1.5">
-                          <Input
-                            type="number"
+                          <CampoNumero
                             className="h-8 text-xs font-mono"
                             value={custo.valor.base}
-                            onChange={(e) => {
+                            onChange={(valor) => {
                               const cd = [...premissas.custos_despesas]
-                              cd[cIdx].valor.base = Number(e.target.value)
+                              cd[cIdx].valor.base = valor
                               atualizarPremissas({ ...premissas, custos_despesas: cd })
                             }}
                           />
@@ -1989,7 +1972,7 @@ export const EstudoCenario: React.FC = () => {
                       descricao: 'Reforma / Adequação Hotel',
                       categoria: 'obra/reforma' as CategoriaInvestimento,
                       mes: 0,
-                      valor: 50000,
+                      valor: null,
                       parte: 'empreendimento' as ResponsavelEconomico,
                     }
                     atualizarPremissas({
@@ -2060,13 +2043,12 @@ export const EstudoCenario: React.FC = () => {
                             </Select>
                           </td>
                           <td className="p-2">
-                            <Input
-                              type="number"
+                            <CampoNumero
                               className="h-7 text-xs font-mono w-16"
                               value={inv.mes}
-                              onChange={(e) => {
+                              onChange={(valor) => {
                                 const invs = [...premissas.investimentos]
-                                invs[iIdx].mes = Number(e.target.value)
+                                invs[iIdx].mes = valor ?? 0
                                 atualizarPremissas({ ...premissas, investimentos: invs })
                               }}
                             />
@@ -2090,13 +2072,12 @@ export const EstudoCenario: React.FC = () => {
                             </Select>
                           </td>
                           <td className="p-2">
-                            <Input
-                              type="number"
+                            <CampoNumero
                               className="h-7 text-xs font-mono w-28"
                               value={inv.valor}
-                              onChange={(e) => {
+                              onChange={(valor) => {
                                 const invs = [...premissas.investimentos]
-                                invs[iIdx].valor = Number(e.target.value)
+                                invs[iIdx].valor = valor ?? 0
                                 atualizarPremissas({ ...premissas, investimentos: invs })
                               }}
                             />
