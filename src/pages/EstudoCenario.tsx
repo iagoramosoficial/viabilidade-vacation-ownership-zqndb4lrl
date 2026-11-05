@@ -95,26 +95,39 @@ export const EstudoCenario: React.FC = () => {
   const mesIni = estudo?.mes_inicial || '2025-01'
 
   // Validação determinística incondicional de premissas (vb_validarPremissas)
+  // Agrupa pendências pelo texto da mensagem para nunca exibir itens repetidos.
   const pendenciasValidacao = useMemo<ItemPendencia[]>(() => {
     if (!premissas) {
       return [{ mensagem: 'Premissas não carregadas', caminho: '', aba: 'funil' }]
     }
     const res = vb_validarPremissas(premissas, horizonte)
     if (!Array.isArray(res)) return []
-    return res.map((item: unknown) => {
+
+    const mapa = new Map<string, ItemPendencia>()
+    for (const item of res) {
+      let mensagem = 'Pendência não especificada'
+      let caminho = ''
+      let aba = 'funil'
+
       if (typeof item === 'string') {
-        return { mensagem: item, caminho: '', aba: 'funil' }
-      }
-      if (item && typeof item === 'object') {
+        mensagem = item
+      } else if (item && typeof item === 'object') {
         const obj = item as Record<string, unknown>
-        return {
-          mensagem: String(obj.mensagem || 'Pendência não especificada'),
-          caminho: typeof obj.caminho === 'string' ? obj.caminho : '',
-          aba: typeof obj.aba === 'string' ? obj.aba : 'funil',
-        }
+        mensagem = String(obj.mensagem || 'Pendência não especificada')
+        caminho = typeof obj.caminho === 'string' ? obj.caminho : ''
+        aba = typeof obj.aba === 'string' ? obj.aba : 'funil'
       }
-      return { mensagem: String(item), caminho: '', aba: 'funil' }
-    })
+
+      const existente = mapa.get(mensagem)
+      if (!existente) {
+        mapa.set(mensagem, { mensagem, caminho, aba })
+      } else if (caminho && !existente.caminho?.includes(caminho)) {
+        // Concatena caminhos adicionais no tooltip para master
+        existente.caminho = existente.caminho ? `${existente.caminho}, ${caminho}` : caminho
+      }
+    }
+
+    return Array.from(mapa.values())
   }, [premissas, horizonte])
 
   const temPendencias = pendenciasValidacao.length > 0
@@ -399,7 +412,7 @@ export const EstudoCenario: React.FC = () => {
         setResultado(res.resultado as ResultadoSimulacaoViabilidade)
         setIsStale(false)
         setMostrarResultados(true)
-        toast.success('Simulação determinística calculada com sucesso no backend!')
+        toast.success('Premissas salvas e cálculo atualizado')
       } else {
         toast.error('Falha no cálculo: ' + (res.error || 'Erro desconhecido'))
       }
@@ -585,13 +598,22 @@ export const EstudoCenario: React.FC = () => {
                 variant="secondary"
                 className="bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 gap-1 text-xs"
               >
-                <AlertTriangle className="h-3 w-3" /> Cálculo Desatualizado (Stale)
+                <AlertTriangle className="h-3 w-3" /> Cálculo desatualizado
               </Badge>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            {estudo.cidade} - {estudo.uf} • Estágio: {estudo.estagio} • Início: {estudo.mes_inicial}{' '}
-            • {estudo.horizonte_meses} meses
+            {estudo.cidade} - {estudo.uf} • Estágio:{' '}
+            {estudo.estagio === 'operando'
+              ? 'Operando'
+              : estudo.estagio === 'reforma/expansao'
+                ? 'Reforma e expansão'
+                : estudo.estagio === 'novo projeto'
+                  ? 'Novo projeto'
+                  : estudo.estagio === 'combinado'
+                    ? 'Combinado'
+                    : estudo.estagio || 'Não informado'}{' '}
+            • Início: {estudo.mes_inicial} • {estudo.horizonte_meses} meses
           </p>
         </div>
 
@@ -647,12 +669,12 @@ export const EstudoCenario: React.FC = () => {
             title={
               temPendencias
                 ? 'Preencha as premissas obrigatórias para habilitar o cálculo'
-                : 'Calcular'
+                : 'Salvar e calcular'
             }
             className="gap-1.5 text-xs h-9 font-semibold shadow-sm"
           >
             <Calculator className="h-4 w-4" />
-            {calculando ? 'Calculando no Backend...' : 'Calcular'}
+            {calculando ? 'Calculando no Backend...' : 'Salvar e calcular'}
           </Button>
 
           {resultado && (
@@ -723,8 +745,8 @@ export const EstudoCenario: React.FC = () => {
             </div>
             <AlertDescription className="text-xs text-rose-800 dark:text-rose-300 space-y-1">
               <p className="text-[11px]">
-                O botão <strong>Calcular</strong> permanece desabilitado enquanto houver pendências
-                no preenchimento das premissas:
+                O botão <strong>Salvar e calcular</strong> permanece desabilitado enquanto houver
+                pendências no preenchimento das premissas:
               </p>
               <ul className="max-h-48 overflow-y-auto pl-1 space-y-1 text-[11px] bg-background/50 p-2 rounded border border-rose-200/50 dark:border-rose-900/50">
                 {pendenciasValidacao.map((item, idx) => {
@@ -743,11 +765,6 @@ export const EstudoCenario: React.FC = () => {
                       <span className="flex-1 font-sans text-rose-900 dark:text-rose-100 group-hover:underline cursor-pointer">
                         {item.mensagem}
                       </span>
-                      {item.caminho && isMaster && (
-                        <span className="font-mono text-[10px] text-muted-foreground shrink-0 bg-muted/60 px-1 py-0.5 rounded">
-                          {item.caminho}
-                        </span>
-                      )}
                     </button>
                   )
 
@@ -1109,6 +1126,29 @@ export const EstudoCenario: React.FC = () => {
                                   atualizarPremissas({ ...premissas, salas: salasNovas })
                                 }}
                               />
+                            </div>
+
+                            <div className="space-y-1 col-span-2 sm:col-span-4">
+                              <Label className="text-[11px]">Quem paga o transporte</Label>
+                              <Select
+                                value={ponto.responsavel_transporte || ''}
+                                onValueChange={(val) => {
+                                  const salasNovas = [...premissas.salas]
+                                  salasNovas[salaIdx].pontos[pIdx].responsavel_transporte =
+                                    val === 'comercializadora' || val === 'empreendimento'
+                                      ? (val as ResponsavelEconomico)
+                                      : null
+                                  atualizarPremissas({ ...premissas, salas: salasNovas })
+                                }}
+                              >
+                                <SelectTrigger className="h-8 text-xs max-w-xs">
+                                  <SelectValue placeholder="Selecione quem paga o transporte..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="comercializadora">Comercializadora</SelectItem>
+                                  <SelectItem value="empreendimento">Empreendimento</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                           </div>
                         </div>
@@ -1909,7 +1949,7 @@ export const EstudoCenario: React.FC = () => {
                       nome: 'Despesa Operacional',
                       tipo: 'fixo' as TipoCustoDespesa,
                       valor: { base: null, ajustes: {} },
-                      responsavel_economico: 'comercializadora' as ResponsavelEconomico,
+                      responsavel_economico: null,
                     }
                     atualizarPremissas({
                       ...premissas,
@@ -1979,15 +2019,18 @@ export const EstudoCenario: React.FC = () => {
                       <div>
                         <Label className="text-[11px]">Responsável Econômico</Label>
                         <Select
-                          value={custo.responsavel_economico}
+                          value={custo.responsavel_economico || ''}
                           onValueChange={(val) => {
                             const cd = [...premissas.custos_despesas]
-                            cd[cIdx].responsavel_economico = val as ResponsavelEconomico
+                            cd[cIdx].responsavel_economico =
+                              val === 'comercializadora' || val === 'empreendimento'
+                                ? (val as ResponsavelEconomico)
+                                : null
                             atualizarPremissas({ ...premissas, custos_despesas: cd })
                           }}
                         >
                           <SelectTrigger className="h-8 text-xs">
-                            <SelectValue />
+                            <SelectValue placeholder="Selecione o responsável..." />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="comercializadora">Comercializadora</SelectItem>
@@ -2044,7 +2087,7 @@ export const EstudoCenario: React.FC = () => {
                       id: 'inv_' + Math.random().toString(36).substring(2, 7),
                       descricao: 'Reforma / Adequação Hotel',
                       categoria: 'obra/reforma' as CategoriaInvestimento,
-                      mes: 0,
+                      mes: null,
                       valor: null,
                       parte: 'empreendimento' as ResponsavelEconomico,
                     }
@@ -2121,7 +2164,7 @@ export const EstudoCenario: React.FC = () => {
                               value={inv.mes}
                               onChange={(valor) => {
                                 const invs = [...premissas.investimentos]
-                                invs[iIdx].mes = valor ?? 0
+                                invs[iIdx].mes = valor
                                 atualizarPremissas({ ...premissas, investimentos: invs })
                               }}
                             />
@@ -2150,7 +2193,7 @@ export const EstudoCenario: React.FC = () => {
                               value={inv.valor}
                               onChange={(valor) => {
                                 const invs = [...premissas.investimentos]
-                                invs[iIdx].valor = valor ?? 0
+                                invs[iIdx].valor = valor
                                 atualizarPremissas({ ...premissas, investimentos: invs })
                               }}
                             />

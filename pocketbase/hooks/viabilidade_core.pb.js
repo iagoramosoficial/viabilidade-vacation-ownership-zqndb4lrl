@@ -149,14 +149,14 @@ function vb_validarPremissas(premissas, horizonte) {
   var modalidadesPresentes = {}
 
   if (!Array.isArray(salas))
-    pend('funil', 'Cadastre ao menos 1 sala de vendas com ponto de captação', 'premissas.salas')
+    pend(
+      'funil',
+      'Lista de salas de vendas ausente ou inválida (aba Salas e Funil)',
+      'premissas.salas',
+    )
   else {
     if (salas.length === 0)
-      pend(
-        'funil',
-        'Cadastre ao menos 1 sala de vendas com ponto de captação (aba Salas e Funil)',
-        'premissas.salas',
-      )
+      pend('funil', 'Cadastre ao menos 1 sala de vendas (aba Salas e Funil)', 'premissas.salas')
     salas.forEach(function (sala, i) {
       var onde = 'salas[' + i + ']'
       var nomeSala = sala && sala.nome ? '"' + sala.nome + '"' : 'sem nome'
@@ -189,7 +189,7 @@ function vb_validarPremissas(premissas, horizonte) {
       if (!Array.isArray(sala.pontos))
         pend(
           'funil',
-          'Salas e Funil › sala ' + nomeSala + ': cadastre ao menos 1 ponto de captação',
+          'Salas e Funil › sala ' + nomeSala + ': lista de pontos de captação ausente ou inválida',
           onde + '.pontos',
         )
       else {
@@ -318,19 +318,15 @@ function vb_validarPremissas(premissas, horizonte) {
       }
     })
   }
-  if (numSalasComPonto === 0)
+  if (numSalasComPonto === 0 && salas.length > 0)
     pend(
       'funil',
-      'Cadastre ao menos 1 sala de vendas com ponto de captação (aba Salas e Funil)',
+      'Cadastre ao menos 1 ponto de captação vinculado a uma sala de vendas (aba Salas e Funil)',
       'premissas.salas',
     )
 
   if (!Array.isArray(produtos))
-    pend(
-      'produtos',
-      'Produtos e Mix › cadastre ao menos 1 produto para o empreendimento',
-      'premissas.produtos',
-    )
+    pend('produtos', 'Produtos e Mix › lista de produtos ausente ou inválida', 'premissas.produtos')
   else {
     if (produtos.length === 0)
       pend(

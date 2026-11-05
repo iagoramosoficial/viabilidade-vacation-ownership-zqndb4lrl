@@ -94,7 +94,7 @@ export interface CustoDespesa {
   nome: string
   tipo: TipoCustoDespesa
   valor: ValorMensalConfig
-  responsavel_economico: ResponsavelEconomico
+  responsavel_economico: ResponsavelEconomico | null
   sala_id?: string
   ponto_id?: string
 }
@@ -108,8 +108,8 @@ export interface DesembolsoInvestimento {
   id: string
   descricao: string
   categoria: CategoriaInvestimento
-  mes: number // 0-based
-  valor: number
+  mes: number | null // 0-based, null = não informado (pendência)
+  valor: number | null // null = não informado (pendência)
   parte: ResponsavelEconomico
 }
 
