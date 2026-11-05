@@ -371,7 +371,7 @@ function vb_validarPremissas(premissas, horizonte) {
           'Produtos e Mix › produto ' + nomeProd + ': o preço de venda não pode ser negativo',
           onde + '.preco',
         )
-      if (!isNum(Number(prod.estoque_disponivel)))
+      if (vazio(prod.estoque_disponivel) || !isNum(Number(prod.estoque_disponivel)))
         pend(
           'produtos',
           'Produtos e Mix › produto ' +
@@ -519,13 +519,21 @@ function vb_validarPremissas(premissas, horizonte) {
         'pagamento',
         'Pagamento › ' + nomeMod + ': informe o percentual de entrada (0% é válido)',
       )
-      if (!isNum(Number(cond.parcelas_entrada)) || Number(cond.parcelas_entrada) < 1)
+      if (
+        vazio(cond.parcelas_entrada) ||
+        !isNum(Number(cond.parcelas_entrada)) ||
+        Number(cond.parcelas_entrada) < 1
+      )
         pend(
           'pagamento',
           'Pagamento › ' + nomeMod + ': informe em quantas parcelas a entrada é paga (mínimo 1)',
           onde + '.parcelas_entrada',
         )
-      if (!isNum(Number(cond.mes_primeira_saldo)) || Number(cond.mes_primeira_saldo) < 0)
+      if (
+        vazio(cond.mes_primeira_saldo) ||
+        !isNum(Number(cond.mes_primeira_saldo)) ||
+        Number(cond.mes_primeira_saldo) < 0
+      )
         pend(
           'pagamento',
           'Pagamento › ' +
@@ -533,7 +541,11 @@ function vb_validarPremissas(premissas, horizonte) {
             ': informe em qual mês começa o pagamento do saldo (0 = já no primeiro mês)',
           onde + '.mes_primeira_saldo',
         )
-      if (!isNum(Number(cond.parcelas_saldo)) || Number(cond.parcelas_saldo) < 0)
+      if (
+        vazio(cond.parcelas_saldo) ||
+        !isNum(Number(cond.parcelas_saldo)) ||
+        Number(cond.parcelas_saldo) < 0
+      )
         pend(
           'pagamento',
           'Pagamento › ' + nomeMod + ': informe em quantas parcelas o saldo é pago (0 é válido)',
@@ -575,7 +587,7 @@ function vb_validarPremissas(premissas, horizonte) {
           'cancelamento',
           'Cancelamentos › ' + nomeMod + ': informe a taxa de cancelamento (0% é válido)',
         )
-        if (!isNum(Number(c.mes_medio)) || Number(c.mes_medio) < 0)
+        if (vazio(c.mes_medio) || !isNum(Number(c.mes_medio)) || Number(c.mes_medio) < 0)
           pend(
             'cancelamento',
             'Cancelamentos › ' +
@@ -591,7 +603,11 @@ function vb_validarPremissas(premissas, horizonte) {
             nomeMod +
             ': informe o percentual devolvido no cancelamento (0% é válido)',
         )
-        if (!isNum(Number(c.prazo_devolucao)) || Number(c.prazo_devolucao) < 1)
+        if (
+          vazio(c.prazo_devolucao) ||
+          !isNum(Number(c.prazo_devolucao)) ||
+          Number(c.prazo_devolucao) < 1
+        )
           pend(
             'cancelamento',
             'Cancelamentos › ' +
@@ -616,7 +632,11 @@ function vb_validarPremissas(premissas, horizonte) {
             nomeMod +
             ': informe o percentual recuperável das parcelas inadimplidas (0% é válido)',
         )
-        if (!isNum(Number(inad.prazo_recuperacao)) || Number(inad.prazo_recuperacao) < 1)
+        if (
+          vazio(inad.prazo_recuperacao) ||
+          !isNum(Number(inad.prazo_recuperacao)) ||
+          Number(inad.prazo_recuperacao) < 1
+        )
           pend(
             'cancelamento',
             'Cancelamentos › ' +
@@ -832,14 +852,14 @@ function vb_validarPremissas(premissas, horizonte) {
           caminho: onde,
           aba: 'custos',
         })
-      if (!isNum(Number(v.mes)) || Number(v.mes) < 0)
+      if (vazio(v.mes) || !isNum(Number(v.mes)) || Number(v.mes) < 0)
         erros.push({
           mensagem:
             'Custos e Investimentos › ' + descV + ': informe o mês do investimento (0 é válido)',
           caminho: onde + '.mes',
           aba: 'custos',
         })
-      if (!isNum(Number(v.valor)) || Number(v.valor) < 0)
+      if (vazio(v.valor) || !isNum(Number(v.valor)) || Number(v.valor) < 0)
         erros.push({
           mensagem:
             'Custos e Investimentos › ' + descV + ': informe o valor do investimento (0 é válido)',
@@ -919,7 +939,12 @@ function vb_calcularSimulacao(premissas, horizonteMeses, mesInicialStr) {
       (errosValidacao.length === 1 ? ' erro' : ' erros') +
       '):'
     var limite = Math.min(errosValidacao.length, 8)
-    for (var ve = 0; ve < limite; ve++) msg += '\n • ' + errosValidacao[ve]
+    for (var ve = 0; ve < limite; ve++)
+      msg +=
+        '\n • ' +
+        (errosValidacao[ve] && errosValidacao[ve].mensagem
+          ? errosValidacao[ve].mensagem
+          : String(errosValidacao[ve]))
     if (errosValidacao.length > 8)
       msg += '\n • ... e mais ' + (errosValidacao.length - 8) + ' erro(s)'
     throw new Error(msg)

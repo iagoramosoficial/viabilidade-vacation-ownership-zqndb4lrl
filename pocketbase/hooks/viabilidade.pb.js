@@ -1489,6 +1489,170 @@ routerAdd('GET', '/backend/v1/viabilidade/autoteste', (e) => {
       addCaso(15, 'Transporte sem responsável', {}, 'erro: ' + err.message, false, err.message)
     }
 
+    // CASO 16: Produto com estoque vazio -> pendência (null/undefined/"" não é 0)
+    try {
+      const p = criarBaseMinima()
+      p.salas = [
+        {
+          id: 's16',
+          nome: 'Sala 16',
+          capacidade_mensal: { base: 60 },
+          pontos: [
+            {
+              id: 'p16',
+              sala_id: 's16',
+              nome: 'Ponto 16',
+              etapa_entrada: 'comparecidos',
+              volume_entrada: { base: 100 },
+              taxa_conversao_venda: { base: 0.2 },
+              custo_transporte_unitario: { base: 0 },
+            },
+          ],
+        },
+      ]
+      p.produtos = [
+        {
+          id: 'prod16',
+          nome: 'Prod 16',
+          modalidade: 'multipropriedade',
+          preco: { base: 40000 },
+          estoque_disponivel: null,
+        },
+      ]
+      p.mix_por_sala = [
+        { sala_id: 's16', produtos: [{ produto_id: 'prod16', percentual: { base: 1.0 } }] },
+      ]
+      const pend = core.vb_validarPremissas(p, 3)
+      const temEstoque = pend.some(
+        (x) =>
+          ((x && x.caminho) || '').indexOf('estoque_disponivel') >= 0 ||
+          ((x && x.mensagem) || '').indexOf('estoque') >= 0,
+      )
+      let zeroOk = false
+      try {
+        const pZero = criarBaseMinima()
+        pZero.salas = p.salas
+        pZero.produtos = [
+          {
+            id: 'prod16z',
+            nome: 'Prod 16Z',
+            modalidade: 'multipropriedade',
+            preco: { base: 40000 },
+            estoque_disponivel: 0,
+          },
+        ]
+        pZero.mix_por_sala = [
+          { sala_id: 's16', produtos: [{ produto_id: 'prod16z', percentual: { base: 1.0 } }] },
+        ]
+        zeroOk = core.vb_validarPremissas(pZero, 3).length === 0
+      } catch (_) {
+        zeroOk = false
+      }
+      const ok = pend.length > 0 && temEstoque && zeroOk
+      addCaso(
+        16,
+        'Produto com estoque vazio -> pendência na aba Produtos (null não é 0); estoque 0 digitado continua válido',
+        { pendencias: '>0', estoque: true, zero_valido: true },
+        {
+          total: pend.length,
+          estoque: temEstoque,
+          zero_valido: zeroOk,
+          detalhes: pend.map((x) => x && x.mensagem),
+        },
+        ok,
+        ok ? 'Estoque vazio bloqueia o cálculo e estoque 0 é aceito.' : 'Divergência',
+      )
+    } catch (err) {
+      addCaso(16, 'Produto com estoque vazio', {}, 'erro: ' + err.message, false, err.message)
+    }
+
+    // CASO 17: Investimento com valor vazio -> pendência (null não é 0)
+    try {
+      const p = criarBaseMinima()
+      p.salas = [
+        {
+          id: 's17',
+          nome: 'Sala 17',
+          capacidade_mensal: { base: 60 },
+          pontos: [
+            {
+              id: 'p17',
+              sala_id: 's17',
+              nome: 'Ponto 17',
+              etapa_entrada: 'comparecidos',
+              volume_entrada: { base: 100 },
+              taxa_conversao_venda: { base: 0.2 },
+              custo_transporte_unitario: { base: 0 },
+            },
+          ],
+        },
+      ]
+      p.produtos = [
+        {
+          id: 'prod17',
+          nome: 'Prod 17',
+          modalidade: 'multipropriedade',
+          preco: { base: 40000 },
+          estoque_disponivel: 100,
+        },
+      ]
+      p.mix_por_sala = [
+        { sala_id: 's17', produtos: [{ produto_id: 'prod17', percentual: { base: 1.0 } }] },
+      ]
+      p.investimentos = [
+        {
+          id: 'inv17',
+          descricao: 'Obra M0 (valor vazio)',
+          categoria: 'obra/reforma',
+          mes: 0,
+          valor: null,
+          parte: 'empreendimento',
+        },
+      ]
+      const pend = core.vb_validarPremissas(p, 3)
+      const temValor = pend.some(
+        (x) =>
+          ((x && x.caminho) || '').indexOf('.valor') >= 0 &&
+          ((x && x.caminho) || '').indexOf('investimentos') >= 0,
+      )
+      let zeroOk = false
+      try {
+        const pZero = criarBaseMinima()
+        pZero.salas = p.salas
+        pZero.produtos = p.produtos
+        pZero.mix_por_sala = p.mix_por_sala
+        pZero.investimentos = [
+          {
+            id: 'inv17z',
+            descricao: 'Obra M0 (valor 0)',
+            categoria: 'obra/reforma',
+            mes: 0,
+            valor: 0,
+            parte: 'empreendimento',
+          },
+        ]
+        zeroOk = core.vb_validarPremissas(pZero, 3).length === 0
+      } catch (_) {
+        zeroOk = false
+      }
+      const ok = pend.length > 0 && temValor && zeroOk
+      addCaso(
+        17,
+        'Investimento com valor vazio -> pendência na aba Custos e Investimentos (null não é 0); valor 0 digitado continua válido',
+        { pendencias: '>0', valor: true, zero_valido: true },
+        {
+          total: pend.length,
+          valor: temValor,
+          zero_valido: zeroOk,
+          detalhes: pend.map((x) => x && x.mensagem),
+        },
+        ok,
+        ok ? 'Investimento sem valor bloqueia o cálculo e valor 0 é aceito.' : 'Divergência',
+      )
+    } catch (err) {
+      addCaso(17, 'Investimento com valor vazio', {}, 'erro: ' + err.message, false, err.message)
+    }
+
     const totalPassou = casos.filter((c) => c.passou).length
     const todosPassaram = totalPassou === casos.length
 
